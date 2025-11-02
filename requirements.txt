@@ -1,0 +1,18 @@
+# Core dependencies
+pyautogen>=0.2.0
+google-generativeai>=0.3.0
+
+# Rate limiting and caching
+ratelimit>=2.2.1
+diskcache>=5.6.3
+
+# Quality checks
+textstat>=0.7.3  # Readability scoring
+
+# File operations
+python-dotenv>=1.0.0  # Environment variables
+
+# Optional but useful
+langchain>=0.1.0  # For context management (optional)
+jinja2>=3.1.2  # For templates
+
