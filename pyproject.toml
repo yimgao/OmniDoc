@@ -15,6 +15,9 @@ dependencies = [
     "diskcache>=5.6.3",
     "textstat>=0.7.3",
     "python-dotenv>=1.0.0",
+    "markdown>=3.5.0",
+    "weasyprint>=60.0",
+    "python-docx>=1.1.0",
 ]
 
 [project.optional-dependencies]

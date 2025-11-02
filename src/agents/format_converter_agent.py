@@ -73,19 +73,78 @@ class FormatConverterAgent(BaseAgent):
                 markdown_content,
                 extensions=['extra', 'codehilite', 'tables']
             )
-            # Wrap in proper HTML structure
+            # Wrap in proper HTML structure with enhanced styling
             full_html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Documentation</title>
     <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }}
-        code {{ background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
-        pre {{ background-color: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
-        table {{ border-collapse: collapse; width: 100%; }}
-        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-        th {{ background-color: #f2f2f2; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.8;
+            color: #333;
+            background-color: #fff;
+        }}
+        h1 {{ font-size: 2.5em; margin: 1em 0 0.5em; color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 0.3em; }}
+        h2 {{ font-size: 2em; margin: 1.5em 0 0.5em; color: #34495e; border-bottom: 2px solid #95a5a6; padding-bottom: 0.3em; }}
+        h3 {{ font-size: 1.5em; margin: 1.2em 0 0.5em; color: #555; }}
+        h4, h5, h6 {{ margin: 1em 0 0.5em; color: #666; }}
+        p {{ margin: 1em 0; text-align: justify; }}
+        code {{
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e83e8c;
+        }}
+        pre {{
+            background-color: #f8f9fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border-left: 4px solid #3498db;
+            margin: 1em 0;
+        }}
+        pre code {{ background-color: transparent; padding: 0; color: #333; }}
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1.5em 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        th, td {{
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }}
+        th {{
+            background-color: #3498db;
+            color: white;
+            font-weight: 600;
+        }}
+        tr:nth-child(even) {{ background-color: #f8f9fa; }}
+        ul, ol {{ margin: 1em 0; padding-left: 2em; }}
+        li {{ margin: 0.5em 0; }}
+        blockquote {{
+            border-left: 4px solid #3498db;
+            padding-left: 1em;
+            margin: 1em 0;
+            color: #666;
+            font-style: italic;
+        }}
+        a {{ color: #3498db; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+        @media print {{
+            body {{ max-width: 100%; padding: 0; }}
+            h1, h2, h3 {{ page-break-after: avoid; }}
+        }}
     </style>
 </head>
 <body>
@@ -101,7 +160,7 @@ class FormatConverterAgent(BaseAgent):
     
     def html_to_pdf(self, html_content: str, output_path: Optional[str] = None) -> str:
         """
-        Convert HTML to PDF
+        Convert HTML to PDF with enhanced styling
         
         Args:
             html_content: HTML content to convert
@@ -112,7 +171,8 @@ class FormatConverterAgent(BaseAgent):
         """
         try:
             # Try using weasyprint first (better quality)
-            from weasyprint import HTML
+            from weasyprint import HTML, CSS
+            from weasyprint.text.fonts import FontConfiguration
             from io import BytesIO
             
             if not output_path:
@@ -122,9 +182,41 @@ class FormatConverterAgent(BaseAgent):
             if not output_path.endswith('.pdf'):
                 output_path = str(Path(output_path).with_suffix('.pdf'))
             
+            # Enhanced CSS for PDF
+            pdf_css = CSS(string='''
+                @page {
+                    size: A4;
+                    margin: 2cm;
+                    @top-center {
+                        content: "Documentation";
+                    }
+                    @bottom-center {
+                        content: "Page " counter(page) " of " counter(pages);
+                    }
+                }
+                body {
+                    font-size: 11pt;
+                    line-height: 1.6;
+                }
+                h1 {
+                    page-break-after: avoid;
+                    margin-top: 1.5em;
+                }
+                h2 {
+                    page-break-after: avoid;
+                    margin-top: 1.2em;
+                }
+                pre {
+                    page-break-inside: avoid;
+                }
+                table {
+                    page-break-inside: avoid;
+                }
+            ''')
+            
             html_obj = HTML(string=html_content)
             pdf_path = self.file_manager.base_dir / output_path
-            html_obj.write_pdf(pdf_path)
+            html_obj.write_pdf(pdf_path, stylesheets=[pdf_css])
             
             return str(pdf_path.absolute())
         except ImportError:
@@ -138,7 +230,16 @@ class FormatConverterAgent(BaseAgent):
                     output_path = str(Path(output_path).with_suffix('.pdf'))
                 
                 pdf_path = self.file_manager.base_dir / output_path
-                pdfkit.from_string(html_content, str(pdf_path))
+                options = {
+                    'page-size': 'A4',
+                    'margin-top': '0.75in',
+                    'margin-right': '0.75in',
+                    'margin-bottom': '0.75in',
+                    'margin-left': '0.75in',
+                    'encoding': "UTF-8",
+                    'no-outline': None
+                }
+                pdfkit.from_string(html_content, str(pdf_path), options=options)
                 
                 return str(pdf_path.absolute())
             except ImportError:

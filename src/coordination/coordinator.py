@@ -336,22 +336,38 @@ class WorkflowCoordinator:
             results["status"]["quality_review"] = "complete"
             print()
             
-            # Step 15: Format Conversion (optional - convert to HTML)
-            print("🔄 Step 15: Converting documentation to HTML format...")
+            # Step 15: Format Conversion (convert to HTML, PDF, DOCX)
+            print("🔄 Step 15: Converting documentation to multiple formats...")
             print("-" * 60)
             try:
+                # Convert to all supported formats
                 format_results = self.format_converter.convert_all_documents(
-                    documents=all_documentation,
-                    formats=["html"],  # Just HTML for now, can add PDF/DOCX later
+                    documents={str(k.value): v for k, v in all_documentation.items()},
+                    formats=["html", "pdf", "docx"],
                     project_id=project_id,
                     context_manager=self.context_manager
                 )
                 results["files"]["format_conversions"] = format_results
                 results["status"]["format_conversions"] = "complete"
-                print(f"✅ Converted {len(format_results)} documents to HTML")
+                
+                total_conversions = sum(len(fmts) for fmts in format_results.values())
+                print(f"✅ Converted {len(format_results)} documents to {total_conversions} files (HTML, PDF, DOCX)")
             except Exception as e:
-                print(f"⚠️  Warning: Format conversion skipped: {e}")
-                results["status"]["format_conversions"] = "skipped"
+                print(f"⚠️  Warning: Format conversion partially failed: {e}")
+                print("   Trying HTML-only conversion as fallback...")
+                try:
+                    format_results = self.format_converter.convert_all_documents(
+                        documents={str(k.value): v for k, v in all_documentation.items()},
+                        formats=["html"],
+                        project_id=project_id,
+                        context_manager=self.context_manager
+                    )
+                    results["files"]["format_conversions"] = format_results
+                    results["status"]["format_conversions"] = "partial (HTML only)"
+                    print(f"✅ Converted {len(format_results)} documents to HTML")
+                except Exception as e2:
+                    print(f"⚠️  Format conversion failed: {e2}")
+                    results["status"]["format_conversions"] = "skipped"
             print()
             
             # Summary
