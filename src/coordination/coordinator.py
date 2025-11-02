@@ -12,6 +12,7 @@ from src.agents.requirements_analyst import RequirementsAnalyst
 from src.agents.pm_documentation_agent import PMDocumentationAgent
 from src.agents.technical_documentation_agent import TechnicalDocumentationAgent
 from src.agents.api_documentation_agent import APIDocumentationAgent
+from src.agents.developer_documentation_agent import DeveloperDocumentationAgent
 from src.rate_limit.queue_manager import RequestQueue
 
 
@@ -45,6 +46,7 @@ class WorkflowCoordinator:
         self.pm_agent = PMDocumentationAgent(rate_limiter=self.rate_limiter)
         self.technical_agent = TechnicalDocumentationAgent(rate_limiter=self.rate_limiter)
         self.api_agent = APIDocumentationAgent(rate_limiter=self.rate_limiter)
+        self.developer_agent = DeveloperDocumentationAgent(rate_limiter=self.rate_limiter)
     
     def generate_all_docs(self, user_idea: str, project_id: Optional[str] = None) -> Dict:
         """
@@ -152,6 +154,29 @@ class WorkflowCoordinator:
             )
             results["files"]["api_documentation"] = api_path
             results["status"]["api_documentation"] = "complete"
+            print()
+            
+            # Step 7: Get API documentation for developer agent
+            print("📖 Step 7: Retrieving API documentation for developer agent...")
+            print("-" * 60)
+            api_output = self.context_manager.get_agent_output(project_id, AgentType.API_DOCUMENTATION)
+            api_summary = api_output.content if api_output else None
+            print("✅ API documentation retrieved")
+            print()
+            
+            # Step 8: Developer Documentation Agent
+            print("👨‍💻 Step 8: Generating Developer Documentation...")
+            print("-" * 60)
+            developer_path = self.developer_agent.generate_and_save(
+                requirements_summary=req_summary,
+                technical_summary=technical_summary,
+                api_summary=api_summary,
+                output_filename="developer_guide.md",
+                project_id=project_id,
+                context_manager=self.context_manager
+            )
+            results["files"]["developer_documentation"] = developer_path
+            results["status"]["developer_documentation"] = "complete"
             print()
             
             # Summary

@@ -4,10 +4,12 @@ from prompts.system_prompts import (
     PM_DOCUMENTATION_PROMPT,
     TECHNICAL_DOCUMENTATION_PROMPT,
     API_DOCUMENTATION_PROMPT,
+    DEVELOPER_DOCUMENTATION_PROMPT,
     get_requirements_prompt,
     get_pm_prompt,
     get_technical_prompt,
-    get_api_prompt
+    get_api_prompt,
+    get_developer_prompt
 )
 
 __all__ = [
@@ -15,9 +17,11 @@ __all__ = [
     'PM_DOCUMENTATION_PROMPT',
     'TECHNICAL_DOCUMENTATION_PROMPT',
     'API_DOCUMENTATION_PROMPT',
+    'DEVELOPER_DOCUMENTATION_PROMPT',
     'get_requirements_prompt',
     'get_pm_prompt',
     'get_technical_prompt',
-    'get_api_prompt'
+    'get_api_prompt',
+    'get_developer_prompt'
 ]
 

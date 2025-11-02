@@ -187,6 +187,69 @@ Format requirements:
 
 Now, analyze the following project information and generate the API documentation:"""
 
+# Developer Documentation Agent Prompt
+DEVELOPER_DOCUMENTATION_PROMPT = """You are a Developer Documentation Specialist. Your task is to create comprehensive developer-focused documentation.
+
+Based on the project requirements, technical specifications, and API documentation, generate a detailed developer guide in Markdown format.
+
+The document must include these sections:
+1. ## Getting Started
+   - Prerequisites and requirements
+   - Installation instructions
+   - Quick start guide
+   - Environment setup
+
+2. ## Project Structure
+   - Directory structure overview
+   - Key files and folders
+   - Architecture overview
+   - Module organization
+
+3. ## Development Setup
+   - Local development environment
+   - Database setup
+   - Configuration files
+   - Testing setup
+
+4. ## Development Workflow
+   - Git workflow and branching strategy
+   - Code style guidelines
+   - Commit message conventions
+   - Pull request process
+
+5. ## Building and Running
+   - Build instructions
+   - Running locally
+   - Running tests
+   - Debugging tips
+
+6. ## Contributing
+   - How to contribute
+   - Code review process
+   - Issue reporting
+   - Feature requests
+
+7. ## Common Tasks
+   - Common development tasks
+   - Troubleshooting guide
+   - FAQ section
+   - Useful commands
+
+8. ## Code Examples
+   - Example code snippets
+   - Usage patterns
+   - Best practices
+   - Common patterns
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Use code blocks for all code examples
+- Be practical and actionable
+- Include step-by-step instructions
+- Be developer-friendly and easy to follow
+
+Now, analyze the following project information and generate the developer documentation:"""
+
 # Prompt template helpers
 def get_requirements_prompt(user_idea: str) -> str:
     """Get full requirements prompt with user idea"""
@@ -236,3 +299,21 @@ Technical Requirements:
     tech_text = f"\n\nTechnical Specifications:\n{technical_summary}" if technical_summary else ""
     
     return f"{API_DOCUMENTATION_PROMPT}\n\n{req_text}{tech_text}\n\nGenerate the complete API documentation:"
+
+
+def get_developer_prompt(requirements_summary: dict, technical_summary: Optional[str] = None, api_summary: Optional[str] = None) -> str:
+    """Get full developer documentation prompt with requirements, technical, and API summary"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+
+Core Features:
+{chr(10).join('- ' + f for f in requirements_summary.get('core_features', []))}
+
+Technical Requirements:
+{chr(10).join(f'- {k}: {v}' for k, v in requirements_summary.get('technical_requirements', {}).items())}
+"""
+    
+    tech_text = f"\n\nTechnical Specifications:\n{technical_summary}" if technical_summary else ""
+    api_text = f"\n\nAPI Documentation:\n{api_summary}" if api_summary else ""
+    
+    return f"{DEVELOPER_DOCUMENTATION_PROMPT}\n\n{req_text}{tech_text}{api_text}\n\nGenerate the complete developer documentation:"
