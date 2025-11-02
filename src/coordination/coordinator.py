@@ -13,6 +13,7 @@ from src.agents.pm_documentation_agent import PMDocumentationAgent
 from src.agents.technical_documentation_agent import TechnicalDocumentationAgent
 from src.agents.api_documentation_agent import APIDocumentationAgent
 from src.agents.developer_documentation_agent import DeveloperDocumentationAgent
+from src.agents.stakeholder_communication_agent import StakeholderCommunicationAgent
 from src.rate_limit.queue_manager import RequestQueue
 
 
@@ -47,6 +48,7 @@ class WorkflowCoordinator:
         self.technical_agent = TechnicalDocumentationAgent(rate_limiter=self.rate_limiter)
         self.api_agent = APIDocumentationAgent(rate_limiter=self.rate_limiter)
         self.developer_agent = DeveloperDocumentationAgent(rate_limiter=self.rate_limiter)
+        self.stakeholder_agent = StakeholderCommunicationAgent(rate_limiter=self.rate_limiter)
     
     def generate_all_docs(self, user_idea: str, project_id: Optional[str] = None) -> Dict:
         """
@@ -177,6 +179,28 @@ class WorkflowCoordinator:
             )
             results["files"]["developer_documentation"] = developer_path
             results["status"]["developer_documentation"] = "complete"
+            print()
+            
+            # Step 9: Get PM documentation for stakeholder agent
+            print("📖 Step 9: Retrieving PM documentation for stakeholder agent...")
+            print("-" * 60)
+            pm_output = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
+            pm_summary = pm_output.content if pm_output else None
+            print("✅ PM documentation retrieved")
+            print()
+            
+            # Step 10: Stakeholder Communication Agent
+            print("👔 Step 10: Generating Stakeholder Communication Document...")
+            print("-" * 60)
+            stakeholder_path = self.stakeholder_agent.generate_and_save(
+                requirements_summary=req_summary,
+                pm_summary=pm_summary,
+                output_filename="stakeholder_summary.md",
+                project_id=project_id,
+                context_manager=self.context_manager
+            )
+            results["files"]["stakeholder_documentation"] = stakeholder_path
+            results["status"]["stakeholder_documentation"] = "complete"
             print()
             
             # Summary

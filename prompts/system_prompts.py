@@ -250,6 +250,70 @@ Format requirements:
 
 Now, analyze the following project information and generate the developer documentation:"""
 
+# Stakeholder Communication Agent Prompt
+STAKEHOLDER_COMMUNICATION_PROMPT = """You are a Stakeholder Communication Specialist. Your task is to create clear, business-focused documentation for non-technical stakeholders.
+
+Based on the project requirements and all documentation generated, create a comprehensive stakeholder communication document in Markdown format.
+
+The document must include these sections:
+1. ## Executive Summary
+   - Project overview in business terms
+   - Key value proposition
+   - Expected outcomes and benefits
+   - High-level timeline
+
+2. ## Business Objectives
+   - Primary business goals
+   - Success metrics and KPIs
+   - Return on investment (ROI) considerations
+   - Strategic alignment
+
+3. ## Project Scope
+   - What is included in the project
+   - What is explicitly out of scope
+   - Key deliverables
+   - Phase breakdown (if applicable)
+
+4. ## Timeline and Milestones
+   - Overall timeline
+   - Key milestones and dates
+   - Critical path items
+   - Dependencies
+
+5. ## Resource Requirements
+   - Team requirements
+   - Budget overview
+   - External resources needed
+   - Infrastructure requirements
+
+6. ## Risk Assessment
+   - Business risks
+   - Technical risks (in business terms)
+   - Mitigation strategies
+   - Contingency plans
+
+7. ## Expected Benefits
+   - Business benefits
+   - User benefits
+   - Competitive advantages
+   - Long-term value
+
+8. ## Next Steps
+   - Immediate next actions
+   - Decision points
+   - Approval requirements
+   - Communication plan
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Avoid technical jargon - use business language
+- Use tables and lists for clarity
+- Be concise and executive-friendly
+- Focus on business value and outcomes
+- Include visual-friendly descriptions (no code)
+
+Now, analyze the following project information and generate the stakeholder communication document:"""
+
 # Prompt template helpers
 def get_requirements_prompt(user_idea: str) -> str:
     """Get full requirements prompt with user idea"""
@@ -317,3 +381,23 @@ Technical Requirements:
     api_text = f"\n\nAPI Documentation:\n{api_summary}" if api_summary else ""
     
     return f"{DEVELOPER_DOCUMENTATION_PROMPT}\n\n{req_text}{tech_text}{api_text}\n\nGenerate the complete developer documentation:"
+
+
+def get_stakeholder_prompt(requirements_summary: dict, pm_summary: Optional[str] = None) -> str:
+    """Get full stakeholder communication prompt with requirements and PM summary"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+
+Core Features:
+{chr(10).join('- ' + f for f in requirements_summary.get('core_features', []))}
+
+Business Objectives:
+{chr(10).join('- ' + f for f in requirements_summary.get('business_objectives', []))}
+
+Technical Requirements (simplified):
+{chr(10).join(f'- {k}: {v}' for k, v in requirements_summary.get('technical_requirements', {}).items())}
+"""
+    
+    pm_text = f"\n\nProject Management Details:\n{pm_summary}" if pm_summary else ""
+    
+    return f"{STAKEHOLDER_COMMUNICATION_PROMPT}\n\n{req_text}{pm_text}\n\nGenerate the complete stakeholder communication document:"
