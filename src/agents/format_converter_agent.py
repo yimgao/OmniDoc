@@ -169,23 +169,21 @@ class FormatConverterAgent(BaseAgent):
         Returns:
             Path to generated PDF file
         """
+        # Suppress stderr BEFORE importing weasyprint (it prints during import)
+        import sys
+        import io
+        import warnings
+        
+        stderr_backup = sys.stderr
+        stderr_capture = io.StringIO()
+        sys.stderr = stderr_capture
+        
+        # Also suppress warnings
+        warnings.filterwarnings("ignore")
+        
         try:
-            # Try using weasyprint first (better quality)
-            import warnings
-            import sys
-            import io
-            
-            # Suppress WeasyPrint warnings about missing system libraries (common on macOS)
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=UserWarning)
-                warnings.filterwarnings("ignore", message=".*WeasyPrint.*")
-                
-                # Suppress stderr temporarily to hide WeasyPrint library warnings
-                stderr_backup = sys.stderr
-                sys.stderr = io.StringIO()
-                
-                try:
-                    from weasyprint import HTML, CSS
+            # Import weasyprint with stderr suppressed
+            from weasyprint import HTML, CSS
                     
                     if not output_path:
                         output_path = "documentation.pdf"
@@ -225,26 +223,71 @@ class FormatConverterAgent(BaseAgent):
                             page-break-inside: avoid;
                         }
                     ''')
-                    
-                    html_obj = HTML(string=html_content)
-                    pdf_path = self.file_manager.base_dir / output_path
-                    html_obj.write_pdf(pdf_path, stylesheets=[pdf_css])
-                    
-                    # Restore stderr
-                    sys.stderr = stderr_backup
-                    
-                    return str(pdf_path.absolute())
-                except (OSError, ImportError) as e:
-                    # Restore stderr before checking error
-                    sys.stderr = stderr_backup
-                    # If it's a library loading error (macOS), skip PDF conversion gracefully
-                    if "libgobject" in str(e).lower() or "dlopen" in str(e).lower():
-                        raise ImportError(
-                            "PDF conversion unavailable: System libraries not available. "
-                            "PDF conversion requires additional system libraries on macOS. "
-                            "HTML and DOCX formats are still available."
-                        )
-                    raise
+            
+            if not output_path:
+                output_path = "documentation.pdf"
+            
+            # Ensure .pdf extension
+            if not output_path.endswith('.pdf'):
+                output_path = str(Path(output_path).with_suffix('.pdf'))
+            
+            # Enhanced CSS for PDF
+            pdf_css = CSS(string='''
+                @page {
+                    size: A4;
+                    margin: 2cm;
+                    @top-center {
+                        content: "Documentation";
+                    }
+                    @bottom-center {
+                        content: "Page " counter(page) " of " counter(pages);
+                    }
+                }
+                body {
+                    font-size: 11pt;
+                    line-height: 1.6;
+                }
+                h1 {
+                    page-break-after: avoid;
+                    margin-top: 1.5em;
+                }
+                h2 {
+                    page-break-after: avoid;
+                    margin-top: 1.2em;
+                }
+                pre {
+                    page-break-inside: avoid;
+                }
+                table {
+                    page-break-inside: avoid;
+                }
+            ''')
+            
+            html_obj = HTML(string=html_content)
+            pdf_path = self.file_manager.base_dir / output_path
+            html_obj.write_pdf(pdf_path, stylesheets=[pdf_css])
+            
+            # Restore stderr AFTER successful conversion
+            sys.stderr = stderr_backup
+            
+            return str(pdf_path.absolute())
+            
+        except (OSError, ImportError, Exception) as e:
+            # Restore stderr before checking error
+            sys.stderr = stderr_backup
+            # Clear the captured stderr (don't print the WeasyPrint warnings)
+            stderr_capture.seek(0)
+            stderr_capture.truncate(0)
+            
+            # If it's a library loading error (macOS), skip PDF conversion gracefully
+            error_str = str(e).lower()
+            if "libgobject" in error_str or "dlopen" in error_str or "cannot load library" in error_str:
+                raise ImportError(
+                    "PDF conversion unavailable: System libraries not available. "
+                    "PDF conversion requires additional system libraries on macOS. "
+                    "HTML and DOCX formats are still available."
+                )
+            raise
         except ImportError:
             try:
                 # Fallback to pdfkit if available
