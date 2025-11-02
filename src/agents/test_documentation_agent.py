@@ -1,0 +1,130 @@
+"""
+Test Documentation Agent
+Generates comprehensive test documentation (test plans, test cases, QA strategies)
+"""
+from typing import Optional
+from datetime import datetime
+from src.agents.base_agent import BaseAgent
+from src.utils.file_manager import FileManager
+from src.context.context_manager import ContextManager
+from src.context.shared_context import AgentType, DocumentStatus, AgentOutput
+from src.rate_limit.queue_manager import RequestQueue
+from prompts.system_prompts import get_test_prompt
+
+
+class TestDocumentationAgent(BaseAgent):
+    """
+    Test Documentation Agent
+    
+    Generates test documentation including:
+    - Test strategy and methodology
+    - Test plan with scope and schedule
+    - Detailed test cases
+    - Test scenarios (E2E, integration)
+    - Regression testing strategy
+    - Performance testing plans
+    - Security testing cases
+    - Test environment setup
+    """
+    
+    def __init__(
+        self,
+        provider_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        rate_limiter: Optional[RequestQueue] = None,
+        file_manager: Optional[FileManager] = None,
+        api_key: Optional[str] = None,
+        **provider_kwargs
+    ):
+        """Initialize Test Documentation Agent"""
+        super().__init__(
+            provider_name=provider_name,
+            model_name=model_name,
+            rate_limiter=rate_limiter,
+            api_key=api_key,
+            **provider_kwargs
+        )
+        
+        self.file_manager = file_manager or FileManager(base_dir="docs/test")
+    
+    def generate(
+        self,
+        requirements_summary: dict,
+        technical_summary: Optional[str] = None
+    ) -> str:
+        """
+        Generate test documentation from requirements and technical specs
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            technical_summary: Optional technical documentation summary
+        
+        Returns:
+            Generated test documentation (Markdown)
+        """
+        # Get prompt from centralized prompts config
+        full_prompt = get_test_prompt(requirements_summary, technical_summary)
+        
+        print(f"🤖 {self.agent_name} is generating test documentation...")
+        print("⏳ This may take a moment (rate limited)...")
+        
+        stats = self.get_stats()
+        print(f"📊 Rate limit status: {stats['requests_in_window']}/{stats['max_rate']} requests in window")
+        
+        try:
+            test_doc = self._call_llm(full_prompt)
+            print("✅ Test documentation generated!")
+            return test_doc
+        except Exception as e:
+            print(f"❌ Error generating test documentation: {e}")
+            raise
+    
+    def generate_and_save(
+        self,
+        requirements_summary: dict,
+        technical_summary: Optional[str] = None,
+        output_filename: str = "test_plan.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate test documentation and save to file
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            technical_summary: Optional technical documentation summary
+            output_filename: Filename to save
+            project_id: Project ID for context sharing
+            context_manager: Context manager for saving
+            
+        Returns:
+            Absolute path to saved file
+        """
+        # Generate documentation
+        test_doc = self.generate(requirements_summary, technical_summary)
+        
+        # Save to file
+        try:
+            file_path = self.file_manager.write_file(output_filename, test_doc)
+            file_size = self.file_manager.get_file_size(output_filename)
+            print(f"✅ File written successfully to {file_path}")
+            print(f"📄 File saved: {output_filename} ({file_size} bytes)")
+            
+            # Save to context if available
+            if project_id and context_manager:
+                output = AgentOutput(
+                    agent_type=AgentType.TEST_DOCUMENTATION,
+                    document_type="test_plan",
+                    content=test_doc,
+                    file_path=file_path,
+                    status=DocumentStatus.COMPLETE,
+                    generated_at=datetime.now()
+                )
+                context_manager.save_agent_output(project_id, output)
+                print(f"✅ Test documentation saved to shared context (project: {project_id})")
+            
+            return file_path
+        except Exception as e:
+            print(f"❌ Error writing file: {e}")
+            raise
+
