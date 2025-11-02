@@ -60,9 +60,7 @@ Thumbs.db
 # Markdown files in root (except README and key docs)
 *.md
 !README.md
-!LICENSE
-!AUTOGEN_COMPARISON.md
-!CURRENT_STATUS.md
+
 
 # Documentation files (organized in docs/)
 # But allow docs/**/*.md to be tracked

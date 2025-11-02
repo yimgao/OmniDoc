@@ -2,6 +2,7 @@
 Web Interface for DOCU-GEN
 FastAPI web application for documentation generation
 """
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +17,28 @@ from src.coordination.coordinator import WorkflowCoordinator
 from src.context.context_manager import ContextManager
 
 
-app = FastAPI(title="DOCU-GEN API", version="1.0.0")
+# Global coordinator and context manager
+coordinator: Optional[WorkflowCoordinator] = None
+context_manager: Optional[ContextManager] = None
+project_status: Dict[str, Dict] = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    global coordinator, context_manager
+    context_manager = ContextManager()
+    coordinator = WorkflowCoordinator(context_manager=context_manager)
+    print("✅ Application startup: Coordinator initialized")
+    
+    yield
+    
+    # Shutdown (cleanup if needed)
+    print("✅ Application shutdown: Cleanup complete")
+
+
+app = FastAPI(title="DOCU-GEN API", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware for frontend access
 app.add_middleware(
@@ -26,11 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global coordinator and context manager
-coordinator: Optional[WorkflowCoordinator] = None
-context_manager: Optional[ContextManager] = None
-project_status: Dict[str, Dict] = {}
 
 
 class GenerationRequest(BaseModel):
@@ -44,14 +61,6 @@ class GenerationResponse(BaseModel):
     project_id: str
     status: str
     message: str
-
-
-@app.on_event("startup")
-async def startup():
-    """Initialize coordinator on startup"""
-    global coordinator, context_manager
-    context_manager = ContextManager()
-    coordinator = WorkflowCoordinator(context_manager=context_manager)
 
 
 @app.get("/", response_class=HTMLResponse)

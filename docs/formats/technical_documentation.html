@@ -72,300 +72,103 @@
     </style>
 </head>
 <body>
-<div class="codehilite"><pre><span></span><code><span class="gh"># Technical Specification Document: Test Idea Application</span>
-
-This document outlines the technical specifications for the &quot;Test Idea&quot; application, covering system architecture, technical stack, database design, API design, security considerations, and deployment architecture.
-
-<span class="gu">## 1. System Architecture</span>
-
-<span class="gu">### High-level architecture overview</span>
-
-The &quot;Test Idea&quot; application will be a three-tier architecture consisting of:
-
-<span class="k">*</span><span class="w"> </span>  <span class="gs">**Presentation Tier (Client):**</span> User interface (UI) built using React.js, responsible for user interaction and displaying data.
-<span class="k">*</span><span class="w"> </span>  <span class="gs">**Application Tier (API):**</span> RESTful API built using Node.js with Express.js, handling business logic, data processing, and API requests.
-<span class="k">*</span><span class="w"> </span>  <span class="gs">**Data Tier (Database):**</span> PostgreSQL database for persistent data storage.
-</code></pre></div>
-
-<p>+---------------------+      +---------------------+      +---------------------+
-| Presentation Tier   | &lt;---&gt; | Application Tier    | &lt;---&gt; | Data Tier           |
-| (React.js)          |      | (Node.js/Express.js)|      | (PostgreSQL)        |
-+---------------------+      +---------------------+      +---------------------+</p>
-<div class="codehilite"><pre><span></span><code><span class="c1">### System components and their interactions</span>
-
-<span class="mf">1.</span><span class="w">  </span><span class="o">**</span><span class="k">User</span><span class="w"> </span><span class="n">Interface</span><span class="w"> </span><span class="p">(</span><span class="n">React</span><span class="p">.</span><span class="n">js</span><span class="p">)</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Handles</span><span class="w"> </span><span class="k">user</span><span class="w"> </span><span class="k">authentication</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">authorization</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Sends</span><span class="w"> </span><span class="n">API</span><span class="w"> </span><span class="n">requests</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">Application</span><span class="w"> </span><span class="n">Tier</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Renders</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="n">received</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">API</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Manages</span><span class="w"> </span><span class="k">user</span><span class="w"> </span><span class="n">sessions</span><span class="w"> </span><span class="k">using</span><span class="w"> </span><span class="n">cookies</span><span class="w"> </span><span class="k">or</span><span class="w"> </span><span class="k">local</span><span class="w"> </span><span class="k">storage</span><span class="p">.</span>
-
-<span class="mf">2.</span><span class="w">  </span><span class="o">**</span><span class="n">API</span><span class="w"> </span><span class="p">(</span><span class="n">Node</span><span class="p">.</span><span class="n">js</span><span class="o">/</span><span class="n">Express</span><span class="p">.</span><span class="n">js</span><span class="p">)</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Receives</span><span class="w"> </span><span class="n">requests</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">UI</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Authenticates</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">authorizes</span><span class="w"> </span><span class="n">users</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Processes</span><span class="w"> </span><span class="n">requests</span><span class="p">,</span><span class="w"> </span><span class="n">including</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="k">validation</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">business</span><span class="w"> </span><span class="n">logic</span><span class="w"> </span><span class="n">execution</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Interacts</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="k">database</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">retrieve</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">store</span><span class="w"> </span><span class="k">data</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="k">Returns</span><span class="w"> </span><span class="n">responses</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">UI</span><span class="w"> </span><span class="k">in</span><span class="w"> </span><span class="kt">JSON</span><span class="w"> </span><span class="k">format</span><span class="p">.</span>
-
-<span class="mf">3.</span><span class="w">  </span><span class="o">**</span><span class="k">Database</span><span class="w"> </span><span class="p">(</span><span class="n">PostgreSQL</span><span class="p">)</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Stores</span><span class="w"> </span><span class="n">persistent</span><span class="w"> </span><span class="k">data</span><span class="p">,</span><span class="w"> </span><span class="n">including</span><span class="w"> </span><span class="k">user</span><span class="w"> </span><span class="n">accounts</span><span class="p">,</span><span class="w"> </span><span class="n">test</span><span class="w"> </span><span class="n">ideas</span><span class="p">,</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">related</span><span class="w"> </span><span class="n">information</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Provides</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="n">access</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">manipulation</span><span class="w"> </span><span class="n">capabilities</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">API</span><span class="p">.</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Enforces</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="n">integrity</span><span class="w"> </span><span class="n">through</span><span class="w"> </span><span class="n">constraints</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">relationships</span><span class="p">.</span>
-
-<span class="c1">### Technology stack selection</span>
-
-<span class="n">The</span><span class="w"> </span><span class="k">following</span><span class="w"> </span><span class="n">technology</span><span class="w"> </span><span class="n">stack</span><span class="w"> </span><span class="n">has</span><span class="w"> </span><span class="n">been</span><span class="w"> </span><span class="n">selected</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="s2">&quot;Test Idea&quot;</span><span class="w"> </span><span class="n">application</span><span class="o">:</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Frontend</span><span class="o">:**</span><span class="w"> </span><span class="n">React</span><span class="p">.</span><span class="n">js</span><span class="p">,</span><span class="w"> </span><span class="n">Redux</span><span class="w"> </span><span class="p">(</span><span class="k">for</span><span class="w"> </span><span class="n">state</span><span class="w"> </span><span class="n">management</span><span class="p">),</span><span class="w"> </span><span class="n">Axios</span><span class="w"> </span><span class="p">(</span><span class="k">for</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="n">requests</span><span class="p">)</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Backend</span><span class="o">:**</span><span class="w"> </span><span class="n">Node</span><span class="p">.</span><span class="n">js</span><span class="p">,</span><span class="w"> </span><span class="n">Express</span><span class="p">.</span><span class="n">js</span><span class="p">,</span><span class="w"> </span><span class="n">JWT</span><span class="w"> </span><span class="p">(</span><span class="k">for</span><span class="w"> </span><span class="k">authentication</span><span class="p">),</span><span class="w"> </span><span class="n">Sequelize</span><span class="w"> </span><span class="p">(</span><span class="n">ORM</span><span class="p">)</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="k">Database</span><span class="o">:**</span><span class="w"> </span><span class="n">PostgreSQL</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Infrastructure</span><span class="o">:**</span><span class="w"> </span><span class="n">AWS</span><span class="w"> </span><span class="p">(</span><span class="n">Elastic</span><span class="w"> </span><span class="n">Beanstalk</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">deployment</span><span class="p">,</span><span class="w"> </span><span class="n">RDS</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="k">database</span><span class="p">)</span>
-
-<span class="c1">### Architecture patterns and design decisions</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">RESTful</span><span class="w"> </span><span class="n">API</span><span class="o">:**</span><span class="w"> </span><span class="n">The</span><span class="w"> </span><span class="n">application</span><span class="w"> </span><span class="n">tier</span><span class="w"> </span><span class="n">will</span><span class="w"> </span><span class="n">expose</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">RESTful</span><span class="w"> </span><span class="n">API</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">communication</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">UI</span><span class="p">.</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Microservices</span><span class="w"> </span><span class="p">(</span><span class="n">Potential</span><span class="w"> </span><span class="n">Future</span><span class="p">)</span><span class="o">:**</span><span class="w"> </span><span class="n">The</span><span class="w"> </span><span class="n">architecture</span><span class="w"> </span><span class="n">can</span><span class="w"> </span><span class="n">be</span><span class="w"> </span><span class="n">scaled</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">microservices</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="n">application</span><span class="w"> </span><span class="n">grows</span><span class="w"> </span><span class="n">significantly</span><span class="p">.</span><span class="w"> </span><span class="k">For</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="k">initial</span><span class="w"> </span><span class="n">version</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="n">monolithic</span><span class="w"> </span><span class="n">architecture</span><span class="w"> </span><span class="n">will</span><span class="w"> </span><span class="n">be</span><span class="w"> </span><span class="n">used</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">simplicity</span><span class="p">.</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">ORM</span><span class="w"> </span><span class="p">(</span><span class="n">Sequelize</span><span class="p">)</span><span class="o">:**</span><span class="w"> </span><span class="n">An</span><span class="w"> </span><span class="n">ORM</span><span class="w"> </span><span class="n">will</span><span class="w"> </span><span class="n">be</span><span class="w"> </span><span class="n">used</span><span class="w"> </span><span class="k">to</span><span class="w"> </span><span class="n">interact</span><span class="w"> </span><span class="k">with</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="k">database</span><span class="p">,</span><span class="w"> </span><span class="n">simplifying</span><span class="w"> </span><span class="k">data</span><span class="w"> </span><span class="n">access</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">management</span><span class="p">.</span>
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">JWT</span><span class="w"> </span><span class="k">Authentication</span><span class="o">:**</span><span class="w"> </span><span class="kt">JSON</span><span class="w"> </span><span class="n">Web</span><span class="w"> </span><span class="n">Tokens</span><span class="w"> </span><span class="n">will</span><span class="w"> </span><span class="n">be</span><span class="w"> </span><span class="n">used</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">secure</span><span class="w"> </span><span class="k">authentication</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">authorization</span><span class="p">.</span>
-
-<span class="c1">## 2. Technical Stack</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Programming</span><span class="w"> </span><span class="n">languages</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">JavaScript</span><span class="w"> </span><span class="p">(</span><span class="n">Frontend</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">Backend</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="k">SQL</span><span class="w"> </span><span class="p">(</span><span class="k">Database</span><span class="p">)</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Frameworks</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">libraries</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">React</span><span class="p">.</span><span class="n">js</span><span class="w"> </span><span class="p">(</span><span class="n">Frontend</span><span class="w"> </span><span class="n">UI</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Redux</span><span class="w"> </span><span class="p">(</span><span class="n">Frontend</span><span class="w"> </span><span class="n">State</span><span class="w"> </span><span class="n">Management</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Axios</span><span class="w"> </span><span class="p">(</span><span class="n">Frontend</span><span class="w"> </span><span class="n">HTTP</span><span class="w"> </span><span class="k">Client</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Node</span><span class="p">.</span><span class="n">js</span><span class="w"> </span><span class="p">(</span><span class="n">Backend</span><span class="w"> </span><span class="n">Runtime</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Express</span><span class="p">.</span><span class="n">js</span><span class="w"> </span><span class="p">(</span><span class="n">Backend</span><span class="w"> </span><span class="n">Web</span><span class="w"> </span><span class="n">Framework</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Sequelize</span><span class="w"> </span><span class="p">(</span><span class="n">Backend</span><span class="w"> </span><span class="n">ORM</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">jsonwebtoken</span><span class="w"> </span><span class="p">(</span><span class="n">Backend</span><span class="w"> </span><span class="k">Authentication</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">bcrypt</span><span class="w"> </span><span class="p">(</span><span class="n">Backend</span><span class="w"> </span><span class="k">Password</span><span class="w"> </span><span class="n">Hashing</span><span class="p">)</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="k">Database</span><span class="w"> </span><span class="n">systems</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">PostgreSQL</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Infrastructure</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">hosting</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">AWS</span><span class="w"> </span><span class="p">(</span><span class="n">Elastic</span><span class="w"> </span><span class="n">Beanstalk</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">application</span><span class="w"> </span><span class="n">deployment</span><span class="p">,</span><span class="w"> </span><span class="n">RDS</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">PostgreSQL</span><span class="w"> </span><span class="k">database</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Docker</span><span class="w"> </span><span class="p">(</span><span class="k">For</span><span class="w"> </span><span class="n">containerization</span><span class="w"> </span><span class="k">and</span><span class="w"> </span><span class="n">deployment</span><span class="p">)</span>
-
-<span class="o">*</span><span class="w">   </span><span class="o">**</span><span class="n">Development</span><span class="w"> </span><span class="n">tools</span><span class="o">:**</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Visual</span><span class="w"> </span><span class="n">Studio</span><span class="w"> </span><span class="k">Code</span><span class="w"> </span><span class="p">(</span><span class="n">IDE</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Git</span><span class="w"> </span><span class="p">(</span><span class="n">Version</span><span class="w"> </span><span class="n">Control</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">npm</span><span class="o">/</span><span class="n">yarn</span><span class="w"> </span><span class="p">(</span><span class="n">Package</span><span class="w"> </span><span class="n">Manager</span><span class="p">)</span>
-<span class="w">    </span><span class="o">*</span><span class="w">   </span><span class="n">Postman</span><span class="o">/</span><span class="n">Insomnia</span><span class="w"> </span><span class="p">(</span><span class="n">API</span><span class="w"> </span><span class="n">Testing</span><span class="p">)</span>
-
-<span class="c1">## 3. Database Design</span>
-
-<span class="c1">### Database schema overview</span>
-
-<span class="n">The</span><span class="w"> </span><span class="k">database</span><span class="w"> </span><span class="k">schema</span><span class="w"> </span><span class="n">will</span><span class="w"> </span><span class="n">consist</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="n">the</span><span class="w"> </span><span class="k">following</span><span class="w"> </span><span class="k">tables</span><span class="o">:</span>
-
-<span class="o">*</span><span class="w">   </span><span class="n n-Quoted">`users`</span><span class="o">:</span><span class="w"> </span><span class="n">Stores</span><span class="w"> </span><span class="k">user</span><span class="w"> </span><span class="k">account</span><span class="w"> </span><span class="n">information</span><span class="p">.</span>
-<span class="o">*</span><span class="w">   </span><span class="n n-Quoted">`ideas`</span><span class="o">:</span><span class="w"> </span><span class="n">Stores</span><span class="w"> </span><span class="n">test</span><span class="w"> </span><span class="n">idea</span><span class="w"> </span><span class="n">information</span><span class="p">.</span>
-
-<span class="c1">### Key data models</span>
-
-<span class="o">**</span><span class="n">users</span><span class="w"> </span><span class="k">table</span><span class="o">:**</span>
-
-<span class="n n-Quoted">`</span><span class="n n-Quoted n-Quoted-Escape">``</span><span class="n n-Quoted">sql</span>
-<span class="n n-Quoted">CREATE TABLE users (</span>
-<span class="n n-Quoted">    id SERIAL PRIMARY KEY,</span>
-<span class="n n-Quoted">    username VARCHAR(255) UNIQUE NOT NULL,</span>
-<span class="n n-Quoted">    email VARCHAR(255) UNIQUE NOT NULL,</span>
-<span class="n n-Quoted">    password VARCHAR(255) NOT NULL,</span>
-<span class="n n-Quoted">    created_at TIMESTAMP DEFAULT NOW(),</span>
-<span class="n n-Quoted">    updated_at TIMESTAMP DEFAULT NOW()</span>
-<span class="n n-Quoted">);</span>
-</code></pre></div>
-
-<p><strong>ideas table:</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="n">ideas</span><span class="w"> </span><span class="p">(</span>
-<span class="w">    </span><span class="n">id</span><span class="w"> </span><span class="nb">SERIAL</span><span class="w"> </span><span class="k">PRIMARY</span><span class="w"> </span><span class="k">KEY</span><span class="p">,</span>
-<span class="w">    </span><span class="n">user_id</span><span class="w"> </span><span class="nb">INTEGER</span><span class="w"> </span><span class="k">REFERENCES</span><span class="w"> </span><span class="n">users</span><span class="p">(</span><span class="n">id</span><span class="p">)</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="k">DELETE</span><span class="w"> </span><span class="k">CASCADE</span><span class="p">,</span>
-<span class="w">    </span><span class="n">title</span><span class="w"> </span><span class="nb">VARCHAR</span><span class="p">(</span><span class="mi">255</span><span class="p">)</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">NULL</span><span class="p">,</span>
-<span class="w">    </span><span class="n">description</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
-<span class="w">    </span><span class="n">created_at</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">(),</span>
-<span class="w">    </span><span class="n">updated_at</span><span class="w"> </span><span class="k">TIMESTAMP</span><span class="w"> </span><span class="k">DEFAULT</span><span class="w"> </span><span class="n">NOW</span><span class="p">()</span>
-<span class="p">);</span>
-</code></pre></div>
-
-<h3>Relationships and constraints</h3>
+<h2>Project Overview</h2>
+<p>The "SmartJobTracking" project aims to develop a comprehensive job application tracking system. This system will allow users to efficiently manage their job search process, from initial application to offer negotiation. The system will provide features for organizing job postings, tracking application statuses, setting reminders, and analyzing job search performance. The goal is to streamline the job search process and improve the user's chances of landing their desired job.</p>
+<h2>Core Features</h2>
 <ul>
-<li>One-to-many relationship between <code>users</code> and <code>ideas</code> (one user can have multiple ideas).</li>
-<li>Foreign key constraint on <code>ideas.user_id</code> referencing <code>users.id</code> with <code>ON DELETE CASCADE</code> to ensure that deleting a user also deletes their associated ideas.</li>
-<li>Unique constraint on <code>users.username</code> and <code>users.email</code>.</li>
-<li><code>NOT NULL</code> constraints on required fields.</li>
+<li><strong>Job Posting Management:</strong><ul>
+<li>Ability to add job postings with relevant details (job title, company, location, salary range, application date, job description, link to the posting).</li>
+<li>Categorize and tag job postings (e.g., by industry, role, company size).</li>
+<li>Import job postings from various job boards using a browser extension or API integration.</li>
 </ul>
-<h3>Indexing strategy (if applicable)</h3>
-<ul>
-<li>Index on <code>users.username</code> and <code>users.email</code> for faster user lookups.</li>
-<li>Index on <code>ideas.user_id</code> for efficient retrieval of ideas by user.</li>
+</li>
+<li><strong>Application Tracking:</strong><ul>
+<li>Track the status of each application (e.g., Applied, Phone Screen, Interview, Offer, Rejected).</li>
+<li>Record the date of each application status update.</li>
+<li>Set reminders for follow-up actions (e.g., sending a thank-you note, checking in with the recruiter).</li>
+<li>Log communication with the company (e.g., emails, phone calls, interview notes).</li>
 </ul>
-<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_users_username</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="p">(</span><span class="n">username</span><span class="p">);</span>
-<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_users_email</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">users</span><span class="w"> </span><span class="p">(</span><span class="n">email</span><span class="p">);</span>
-<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="n">idx_ideas_user_id</span><span class="w"> </span><span class="k">ON</span><span class="w"> </span><span class="n">ideas</span><span class="w"> </span><span class="p">(</span><span class="n">user_id</span><span class="p">);</span>
-</code></pre></div>
-
-<h2>4. API Design</h2>
-<h3>API endpoints overview</h3>
-<table>
-<thead>
-<tr>
-<th>Method</th>
-<th>Endpoint</th>
-<th>Description</th>
-<th>Request Body</th>
-<th>Response Body</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>POST</td>
-<td><code>/api/users/register</code></td>
-<td>Register a new user.</td>
-<td><code>{ username, email, password }</code></td>
-<td><code>{ id, username, email }</code></td>
-</tr>
-<tr>
-<td>POST</td>
-<td><code>/api/users/login</code></td>
-<td>Authenticate a user and return a JWT.</td>
-<td><code>{ username, password }</code></td>
-<td><code>{ token }</code></td>
-</tr>
-<tr>
-<td>GET</td>
-<td><code>/api/ideas</code></td>
-<td>Get all ideas (requires authentication).</td>
-<td>None</td>
-<td><code>[{ id, user_id, title, description, created_at, updated_at }]</code></td>
-</tr>
-<tr>
-<td>GET</td>
-<td><code>/api/ideas/:id</code></td>
-<td>Get a specific idea by ID (requires authentication).</td>
-<td>None</td>
-<td><code>{ id, user_id, title, description, created_at, updated_at }</code></td>
-</tr>
-<tr>
-<td>POST</td>
-<td><code>/api/ideas</code></td>
-<td>Create a new idea (requires authentication).</td>
-<td><code>{ title, description }</code></td>
-<td><code>{ id, user_id, title, description, created_at, updated_at }</code></td>
-</tr>
-<tr>
-<td>PUT</td>
-<td><code>/api/ideas/:id</code></td>
-<td>Update an existing idea (requires authentication).</td>
-<td><code>{ title, description }</code></td>
-<td><code>{ id, user_id, title, description, created_at, updated_at }</code></td>
-</tr>
-<tr>
-<td>DELETE</td>
-<td><code>/api/ideas/:id</code></td>
-<td>Delete an idea (requires authentication).</td>
-<td>None</td>
-<td><code>{ message: "Idea deleted successfully" }</code></td>
-</tr>
-</tbody>
-</table>
-<h3>Request/response formats</h3>
-<p>All API requests and responses will be in JSON format.</p>
-<p><strong>Example: POST /api/users/register Request</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;username&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;testuser&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;email&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;test@example.com&quot;</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;password&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;password123&quot;</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<p><strong>Example: GET /api/ideas Response</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">[</span>
-<span class="w">  </span><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;user_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;title&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;My First Idea&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A great idea for testing!&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;created_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2023-10-27T10:00:00.000Z&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;updated_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2023-10-27T10:00:00.000Z&quot;</span>
-<span class="w">  </span><span class="p">}</span>
-<span class="p">]</span>
-</code></pre></div>
-
-<h3>Authentication and authorization</h3>
-<ul>
-<li><strong>Authentication:</strong> JWT (JSON Web Tokens) will be used for authentication.  Upon successful login, the server will issue a JWT to the client.</li>
-<li><strong>Authorization:</strong> The JWT will be included in the <code>Authorization</code> header of subsequent requests.  The server will verify the JWT to authorize access to protected resources.</li>
-<li><strong>User Roles (Future):</strong>  Role-based access control can be implemented in the future by adding a <code>role</code> field to the <code>users</code> table and including the role in the JWT.</li>
+</li>
+<li><strong>Progress Visualization &amp; Analytics:</strong><ul>
+<li>Visualize the job search progress with charts and graphs (e.g., number of applications, interview conversion rate, time spent on each stage).</li>
+<li>Generate reports on job search performance (e.g., average time to get an interview, success rate by industry).</li>
+<li>Provide insights and recommendations based on the user's job search data.</li>
 </ul>
-<h3>Error handling</h3>
-<ul>
-<li>API endpoints will return appropriate HTTP status codes to indicate success or failure.</li>
-<li>Error responses will include a JSON object with an <code>error</code> field containing a descriptive error message.</li>
+</li>
+<li><strong>Resume &amp; Cover Letter Management:</strong><ul>
+<li>Store and manage multiple versions of resumes and cover letters.</li>
+<li>Associate specific resumes and cover letters with individual job applications.</li>
+<li>Track which resume and cover letter versions are performing best.</li>
 </ul>
-<p><strong>Example Error Response:</strong></p>
-<div class="codehilite"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Invalid credentials&quot;</span>
-<span class="p">}</span>
-</code></pre></div>
-
-<h2>5. Security Considerations</h2>
-<h3>Security requirements</h3>
-<ul>
-<li>Protect user credentials (passwords) using strong hashing algorithms.</li>
-<li>Secure API endpoints using authentication and authorization mechanisms.</li>
-<li>Protect against common web vulnerabilities such as cross-site scripting (XSS) and SQL injection.</li>
-<li>Ensure data privacy and compliance with relevant regulations.</li>
+</li>
+<li><strong>Integration with Job Boards and LinkedIn:</strong><ul>
+<li>Directly apply to jobs from within the SmartJobTracking system (via API integration).</li>
+<li>Import profile information from LinkedIn to pre-populate application forms.</li>
+<li>Automatically update application statuses based on information from LinkedIn.</li>
 </ul>
-<h3>Authentication mechanisms</h3>
-<ul>
-<li>JWT (JSON Web Tokens) will be used for authentication.</li>
-<li>Passwords will be hashed using bcrypt before being stored in the database.</li>
+</li>
+<li><strong>Task Management:</strong><ul>
+<li>Create and manage tasks related to the job search (e.g., "Research company X," "Practice interview questions").</li>
+<li>Assign due dates and priorities to tasks.</li>
+<li>Receive reminders for upcoming tasks.</li>
 </ul>
-<h3>Data protection</h3>
-<ul>
-<li>Sensitive data (e.g., passwords) will be encrypted at rest and in transit.</li>
-<li>Regular backups will be performed to protect against data loss.</li>
-<li>Input validation will be implemented to prevent SQL injection attacks.</li>
+</li>
 </ul>
-<h3>Security best practices</h3>
+<h2>Technical Requirements</h2>
 <ul>
-<li>Follow secure coding practices.</li>
-<li>Regularly update software dependencies to patch security vulnerabilities.</li>
-<li>Implement a strong password policy.</li>
-<li>Monitor system logs for suspicious activity.</li>
-<li>Conduct regular security audits.</li>
+<li><strong>Platform:</strong> Web-based application accessible on desktop and mobile devices.  Consider developing native mobile apps for iOS and Android in the future.</li>
+<li><strong>Database:</strong> Relational database (e.g., PostgreSQL, MySQL) to store job postings, application data, and user information. Scalability should be considered.</li>
+<li><strong>Programming Languages:</strong> Python (with frameworks like Django or Flask) or Node.js (with frameworks like Express.js) for backend development. React, Angular, or Vue.js for frontend development.</li>
+<li><strong>API Integrations:</strong>  Integrate with popular job boards (e.g., Indeed, LinkedIn, Glassdoor), email providers (e.g., Gmail, Outlook), and calendar applications (e.g., Google Calendar, Outlook Calendar).</li>
+<li><strong>Security:</strong> Secure user authentication and authorization. Data encryption at rest and in transit. Regular security audits and penetration testing. Compliance with data privacy regulations (e.g., GDPR, CCPA).</li>
+<li><strong>Hosting:</strong> Cloud-based hosting platform (e.g., AWS, Google Cloud, Azure) for scalability and reliability.</li>
+<li><strong>Browser Compatibility:</strong> Support for modern web browsers (e.g., Chrome, Firefox, Safari, Edge).</li>
+<li><strong>Performance:</strong> The application should load quickly and be responsive to user interactions.  Implement caching strategies to improve performance.</li>
 </ul>
-<h2>6. Deployment Architecture</h2>
-<h3>Deployment strategy</h3>
+<h2>User Personas</h2>
 <ul>
-<li>Docker containers will be used for packaging and deploying the application.</li>
-<li>AWS Elastic Beanstalk will be used for deploying the application to the cloud.</li>
-<li>Continuous integration and continuous deployment (CI/CD) will be implemented using Jenkins.</li>
+<li><strong>Sarah, the Recent Graduate:</strong><ul>
+<li>Recently graduated from college with a degree in marketing.</li>
+<li>Applying to entry-level marketing positions.</li>
+<li>Needs help organizing her applications and tracking her progress.</li>
+<li>Feels overwhelmed by the number of applications she needs to submit.</li>
+<li>Needs reminders to follow up with companies.</li>
 </ul>
-<h3>Infrastructure requirements</h3>
-<ul>
-<li>AWS account</li>
-<li>Elastic Beanstalk environment</li>
-<li>RDS instance for PostgreSQL database</li>
-<li>Domain name (optional)</li>
+</li>
+<li><strong>David, the Experienced Professional:</strong><ul>
+<li>Has 5+ years of experience in software engineering.</li>
+<li>Looking for a more challenging and rewarding role.</li>
+<li>Applying to senior-level positions.</li>
+<li>Needs to manage multiple versions of his resume and cover letter.</li>
+<li>Wants to track his interview performance and identify areas for improvement.</li>
 </ul>
-<h3>Scaling considerations</h3>
-<ul>
-<li>Horizontal scaling can be achieved by adding more instances to the Elastic Beanstalk environment.</li>
-<li>Database scaling can be achieved by using RDS read replicas or by migrating to a larger RDS instance.</li>
-<li>Load balancing will be used to distribute traffic across multiple instances.</li>
+</li>
+<li><strong>Maria, the Career Changer:</strong><ul>
+<li>Switching careers from teaching to project management.</li>
+<li>Needs to highlight her transferable skills.</li>
+<li>Applying to entry-level project management positions.</li>
+<li>Needs help tailoring her resume and cover letter to specific job requirements.</li>
+<li>Needs to research different project management roles and companies.</li>
 </ul>
-<h3>Monitoring and logging</h3>
+</li>
+</ul>
+<h2>Business Objectives</h2>
 <ul>
-<li>AWS CloudWatch will be used for monitoring application performance and health.</li>
-<li>Application logs will be collected and analyzed to identify issues and trends.</li>
-<li>Alerts will be configured to notify administrators of critical events.</li>
-<li>Consider using a centralized logging system (e.g., ELK stack) for more advanced log analysis.
-```</li>
+<li><strong>Acquire 10,000 active users within the first year.</strong>  Track user sign-ups and monthly active users (MAU).</li>
+<li><strong>Achieve a customer satisfaction score (CSAT) of 4.5 out of 5.</strong>  Collect user feedback through surveys and in-app feedback forms.</li>
+<li><strong>Generate revenue through a freemium subscription model.</strong> Offer a free plan with limited features and a paid plan with premium features.</li>
+<li><strong>Reduce user churn rate to less than 5% per month.</strong>  Identify reasons for churn and implement strategies to retain users.</li>
+<li><strong>Become a leading job application tracking system in the market.</strong>  Monitor competitor activity and strive to offer a superior user experience.</li>
+<li><strong>Increase user engagement by providing personalized insights and recommendations.</strong> Track feature usage and identify opportunities to improve user engagement.</li>
+</ul>
+<h2>Constraints and Assumptions</h2>
+<ul>
+<li><strong>Limited Budget:</strong> The project has a limited budget for development and marketing. Requires careful resource allocation and prioritization.</li>
+<li><strong>Time Constraints:</strong> The project needs to be launched within a reasonable timeframe (e.g., 6-9 months). Implement agile development methodologies to ensure timely delivery.</li>
+<li><strong>Availability of APIs:</strong>  The success of the project depends on the availability and reliability of APIs from job boards and other third-party services.</li>
+<li><strong>User Adoption:</strong>  The project's success depends on users adopting the system and actively using its features. Requires effective onboarding and user training.</li>
+<li><strong>Market Competition:</strong>  The job application tracking market is competitive. Requires a strong value proposition and effective marketing to differentiate the system from competitors.</li>
+<li><strong>Legal Compliance:</strong> The system must comply with all relevant data privacy regulations (e.g., GDPR, CCPA). Legal review and compliance checks are necessary.</li>
 </ul>
 </body>
 </html>

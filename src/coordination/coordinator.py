@@ -4,6 +4,7 @@ Orchestrates multi-agent documentation generation workflow
 """
 from typing import Optional, Dict, List
 from datetime import datetime
+from pathlib import Path
 import uuid
 
 from src.context.context_manager import ContextManager
