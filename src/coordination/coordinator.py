@@ -10,6 +10,7 @@ from src.context.context_manager import ContextManager
 from src.context.shared_context import AgentType, DocumentStatus, SharedContext
 from src.agents.requirements_analyst import RequirementsAnalyst
 from src.agents.pm_documentation_agent import PMDocumentationAgent
+from src.agents.technical_documentation_agent import TechnicalDocumentationAgent
 from src.rate_limit.queue_manager import RequestQueue
 
 
@@ -41,6 +42,7 @@ class WorkflowCoordinator:
         # Initialize agents (shared rate limiter)
         self.requirements_analyst = RequirementsAnalyst(rate_limiter=self.rate_limiter)
         self.pm_agent = PMDocumentationAgent(rate_limiter=self.rate_limiter)
+        self.technical_agent = TechnicalDocumentationAgent(rate_limiter=self.rate_limiter)
     
     def generate_all_docs(self, user_idea: str, project_id: Optional[str] = None) -> Dict:
         """
@@ -113,6 +115,19 @@ class WorkflowCoordinator:
             )
             results["files"]["pm_documentation"] = pm_path
             results["status"]["pm_documentation"] = "complete"
+            print()
+            
+            # Step 4: Technical Documentation Agent
+            print("🔧 Step 4: Generating Technical Documentation...")
+            print("-" * 60)
+            technical_path = self.technical_agent.generate_and_save(
+                requirements_summary=req_summary,
+                output_filename="technical_spec.md",
+                project_id=project_id,
+                context_manager=self.context_manager
+            )
+            results["files"]["technical_documentation"] = technical_path
+            results["status"]["technical_documentation"] = "complete"
             print()
             
             # Summary
