@@ -115,9 +115,10 @@ class BaseAgent(ABC):
         model_to_use = model or self.model_name
         logger.debug(f"{self.agent_name} calling LLM (model: {model_to_use}, prompt length: {len(prompt)}, temperature: {temperature})")
         
-        def make_request():
+        # Define make_request to accept prompt as parameter so cache key includes prompt content
+        def make_request(prompt_str: str):
             return self.llm_provider.generate(
-                prompt=prompt,
+                prompt=prompt_str,
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -125,7 +126,8 @@ class BaseAgent(ABC):
             )
         
         try:
-            response = self.rate_limiter.execute(make_request)
+            # Pass prompt as argument so it's included in cache key generation
+            response = self.rate_limiter.execute(make_request, prompt)
             logger.info(f"{self.agent_name} LLM call completed (response length: {len(response)} characters)")
             # Clean and validate response
             cleaned_response = self._clean_llm_response(response)

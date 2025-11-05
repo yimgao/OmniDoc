@@ -27,7 +27,9 @@ class TestTechnicalDocumentationAgent:
             file_manager=file_manager
         )
         
-        result = agent.generate(sample_requirements_summary)
+        # Provide required dependencies (user_stories or pm_summary)
+        user_stories_summary = "## User Story 1\nAs a user, I want to create blog posts"
+        result = agent.generate(sample_requirements_summary, user_stories_summary=user_stories_summary)
         
         assert result is not None
         assert len(result) > 0
@@ -39,8 +41,14 @@ class TestTechnicalDocumentationAgent:
             file_manager=file_manager
         )
         
-        file_path = agent.generate_and_save(sample_requirements_summary, "tech_spec.md")
+        # Provide required dependencies (user_stories or pm_summary)
+        user_stories_summary = "## User Story 1\nAs a user, I want to create blog posts"
+        file_path = agent.generate_and_save(
+            sample_requirements_summary, 
+            user_stories_summary=user_stories_summary,
+            output_filename="technical_spec.md"
+        )
         
         assert file_path is not None
-        assert file_manager.file_exists("tech_spec.md")
+        assert file_manager.file_exists("technical_spec.md")
 

@@ -27,7 +27,9 @@ class TestAPIDocumentationAgent:
             file_manager=file_manager
         )
         
-        result = agent.generate(sample_requirements_summary)
+        # Provide required technical_summary dependency
+        technical_summary = "## System Architecture\nREST API with FastAPI"
+        result = agent.generate(sample_requirements_summary, technical_summary)
         
         assert result is not None
         assert len(result) > 0
@@ -52,7 +54,13 @@ class TestAPIDocumentationAgent:
             file_manager=file_manager
         )
         
-        file_path = agent.generate_and_save(sample_requirements_summary, output_filename="api_docs.md")
+        # Provide required technical_summary dependency
+        technical_summary = "## System Architecture\nREST API with FastAPI"
+        file_path = agent.generate_and_save(
+            sample_requirements_summary, 
+            technical_summary=technical_summary,
+            output_filename="api_docs.md"
+        )
         
         assert file_path is not None
         assert file_manager.file_exists("api_docs.md")

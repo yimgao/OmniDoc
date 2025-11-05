@@ -122,13 +122,14 @@ class WorkflowCoordinator:
             context_manager=self.context_manager
         )
     
-    def generate_all_docs(self, user_idea: str, project_id: Optional[str] = None) -> Dict:
+    def generate_all_docs(self, user_idea: str, project_id: Optional[str] = None, profile: str = "team") -> Dict:
         """
         Generate all documentation types from a user idea
         
         Args:
             user_idea: User's project idea
             project_id: Optional project ID (generates one if not provided)
+            profile: "team" or "individual" - determines which docs to generate
         
         Returns:
             Dict with generated file paths and status
@@ -140,12 +141,13 @@ class WorkflowCoordinator:
         else:
             logger.info(f"Using provided project_id: {project_id}")
         
-        logger.info(f"Starting multi-agent documentation generation workflow (project: {project_id}, idea length: {len(user_idea)} characters)")
-        logger.info(f"🚀 Starting Multi-Agent Documentation Generation - Project ID: {project_id}, User Idea: {user_idea}")
+        logger.info(f"Starting multi-agent documentation generation workflow (project: {project_id}, idea length: {len(user_idea)} characters, profile: {profile})")
+        logger.info(f"🚀 Starting Multi-Agent Documentation Generation - Project ID: {project_id}, Profile: {profile}, User Idea: {user_idea}")
         
         results = {
             "project_id": project_id,
             "user_idea": user_idea,
+            "profile": profile,
             "files": {},
             "status": {}
         }
@@ -180,44 +182,53 @@ class WorkflowCoordinator:
                 "technical_requirements": context.requirements.technical_requirements
             }
             
-            # Step 3: Project Charter Agent (Level 1: Strategic)
-            doc_level = get_document_level("project_charter")
-            logger.info(f"Step 3: Starting Project Charter Agent ({doc_level.value})")
-            charter_path = self.project_charter_agent.generate_and_save(
-                requirements_summary=req_summary,
-                output_filename="project_charter.md",
-                project_id=project_id,
-                context_manager=self.context_manager
-            )
-            results["files"]["project_charter"] = charter_path
-            results["status"]["project_charter"] = "complete"
-            logger.info(f"Step 3 completed: Project Charter saved to {charter_path}")
+            charter_summary = None  # Initialize for use in later steps
             
-            # Step 4: PM Documentation Agent (Level 2 - uses Level 1 output)
-            doc_level = get_document_level("pm_documentation")
-            logger.info(f"Step 4: Starting PM Documentation Agent ({doc_level.value})")
-            # Get Project Charter from context
-            charter_output = self.context_manager.get_agent_output(project_id, AgentType.PROJECT_CHARTER)
-            charter_summary = charter_output.content if charter_output else None
-            if charter_summary:
-                logger.debug(f"Using Project Charter ({len(charter_summary)} chars) for PM documentation")
-            pm_path = self.pm_agent.generate_and_save(
-                requirements_summary=req_summary,
-                project_charter_summary=charter_summary,
-                output_filename="project_plan.md",
-                project_id=project_id,
-                context_manager=self.context_manager
-            )
-            results["files"]["pm_documentation"] = pm_path
-            results["status"]["pm_documentation"] = "complete"
-            logger.info(f"Step 4 completed: PM documentation saved to {pm_path}")
+            # Step 3 & 4: Project Charter and PM Documentation (Team only)
+            if profile == "team":
+                # Step 3: Project Charter Agent (Level 1: Strategic)
+                doc_level = get_document_level("project_charter")
+                logger.info(f"Step 3 (Team): Starting Project Charter Agent ({doc_level.value})")
+                charter_path = self.project_charter_agent.generate_and_save(
+                    requirements_summary=req_summary,
+                    output_filename="project_charter.md",
+                    project_id=project_id,
+                    context_manager=self.context_manager
+                )
+                results["files"]["project_charter"] = charter_path
+                results["status"]["project_charter"] = "complete"
+                logger.info(f"Step 3 (Team) completed: Project Charter saved to {charter_path}")
+                
+                # Step 4: PM Documentation Agent (Level 2 - uses Level 1 output)
+                doc_level = get_document_level("pm_documentation")
+                logger.info(f"Step 4 (Team): Starting PM Documentation Agent ({doc_level.value})")
+                # Get Project Charter from context
+                charter_output = self.context_manager.get_agent_output(project_id, AgentType.PROJECT_CHARTER)
+                charter_summary = charter_output.content if charter_output else None
+                if charter_summary:
+                    logger.debug(f"Using Project Charter ({len(charter_summary)} chars) for PM documentation")
+                pm_path = self.pm_agent.generate_and_save(
+                    requirements_summary=req_summary,
+                    project_charter_summary=charter_summary,
+                    output_filename="project_plan.md",
+                    project_id=project_id,
+                    context_manager=self.context_manager
+                )
+                results["files"]["pm_documentation"] = pm_path
+                results["status"]["pm_documentation"] = "complete"
+                logger.info(f"Step 4 (Team) completed: PM documentation saved to {pm_path}")
+            else:
+                logger.info(f"Step 3 & 4 (Individual): Skipping Project Charter and PM Documentation")
+                results["status"]["project_charter"] = "skipped"
+                results["status"]["pm_documentation"] = "skipped"
             
-            # Step 5: User Stories Agent (Level 2 - uses Level 1 output)
+            # Step 5: User Stories Agent (Level 2 - uses Level 1 output if available)
             doc_level = get_document_level("user_stories")
             logger.info(f"Step 5: Starting User Stories Agent ({doc_level.value})")
-            # Get Project Charter from context (reuse from Step 3)
-            charter_output = self.context_manager.get_agent_output(project_id, AgentType.PROJECT_CHARTER)
-            charter_summary = charter_output.content if charter_output else None
+            # Get Project Charter from context (if team mode, already available; if individual, will be None)
+            if charter_summary is None:
+                charter_output = self.context_manager.get_agent_output(project_id, AgentType.PROJECT_CHARTER)
+                charter_summary = charter_output.content if charter_output else None
             if charter_summary:
                 logger.debug(f"Using Project Charter ({len(charter_summary)} chars) for User Stories")
             user_stories_path = self.user_stories_agent.generate_and_save(
@@ -237,8 +248,10 @@ class WorkflowCoordinator:
             # Get Level 2 outputs
             user_stories_output = self.context_manager.get_agent_output(project_id, AgentType.USER_STORIES)
             user_stories_summary = user_stories_output.content if user_stories_output else None
-            pm_output_for_tech = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
-            pm_summary_for_tech = pm_output_for_tech.content if pm_output_for_tech else None
+            pm_summary_for_tech = None  # Default to None for individual profile
+            if profile == "team":  # Only get PM summary in team mode
+                pm_output_for_tech = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
+                pm_summary_for_tech = pm_output_for_tech.content if pm_output_for_tech else None
             if user_stories_summary:
                 logger.debug(f"Using User Stories ({len(user_stories_summary)} chars) for Technical documentation")
             if pm_summary_for_tech:
@@ -318,23 +331,29 @@ class WorkflowCoordinator:
             results["files"]["developer_documentation"] = developer_path
             results["status"]["developer_documentation"] = "complete"
             
-            # Step 12: Get PM documentation for stakeholder agent
-            logger.info("Step 12: Retrieving PM documentation for stakeholder agent")
-            pm_output = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
-            pm_summary = pm_output.content if pm_output else None
-            
-            # Step 13: Stakeholder Communication Agent
-            doc_level = get_document_level("stakeholder_communication")
-            logger.info(f"Step 13: Starting Stakeholder Communication Agent ({doc_level.value})")
-            stakeholder_path = self.stakeholder_agent.generate_and_save(
-                requirements_summary=req_summary,
-                pm_summary=pm_summary,
-                output_filename="stakeholder_summary.md",
-                project_id=project_id,
-                context_manager=self.context_manager
-            )
-            results["files"]["stakeholder_documentation"] = stakeholder_path
-            results["status"]["stakeholder_documentation"] = "complete"
+            # Step 12 & 13: Stakeholder Communication Agent (Team only)
+            if profile == "team":
+                # Step 12: Get PM documentation for stakeholder agent
+                logger.info("Step 12 (Team): Retrieving PM documentation for stakeholder agent")
+                pm_output = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
+                pm_summary = pm_output.content if pm_output else None
+                
+                # Step 13: Stakeholder Communication Agent
+                doc_level = get_document_level("stakeholder_communication")
+                logger.info(f"Step 13 (Team): Starting Stakeholder Communication Agent ({doc_level.value})")
+                stakeholder_path = self.stakeholder_agent.generate_and_save(
+                    requirements_summary=req_summary,
+                    pm_summary=pm_summary,
+                    output_filename="stakeholder_summary.md",
+                    project_id=project_id,
+                    context_manager=self.context_manager
+                )
+                results["files"]["stakeholder_documentation"] = stakeholder_path
+                results["status"]["stakeholder_documentation"] = "complete"
+                logger.info(f"Step 13 (Team) completed: Stakeholder documentation saved to {stakeholder_path}")
+            else:
+                logger.info(f"Step 12 & 13 (Individual): Skipping Stakeholder Communication")
+                results["status"]["stakeholder_documentation"] = "skipped"
             
             
             # Step 14: Test Documentation Agent
@@ -530,7 +549,7 @@ class WorkflowCoordinator:
             return results
             
         except Exception as e:
-            logger.error(f"Error in workflow: {str(e)}", exc_info=True)
+            logger.error(f"Error in workflow (profile: {profile}): {str(e)}", exc_info=True)
             results["error"] = str(e)
             return results
     

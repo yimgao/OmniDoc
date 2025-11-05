@@ -53,6 +53,7 @@ class GenerationRequest(BaseModel):
     """Request model for documentation generation"""
     user_idea: str
     project_id: Optional[str] = None
+    profile: Optional[str] = "team"  # "team" or "individual"
 
 
 class GenerationResponse(BaseModel):
@@ -268,6 +269,18 @@ async def root():
                     <label for="userIdea">Enter your project idea:</label>
                     <textarea id="userIdea" name="userIdea" placeholder="e.g., Build a task management application with team collaboration features" required></textarea>
                 </div>
+                
+                <div class="form-group">
+                    <label>Select project profile:</label>
+                    <div style="display: flex; gap: 20px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="radio" name="profile" value="team" checked> Team (All Docs)
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="radio" name="profile" value="individual"> Individual (Core Docs)
+                        </label>
+                    </div>
+                </div>
                 <button type="submit" id="generateBtn">Generate Documentation</button>
             </form>
             
@@ -297,6 +310,8 @@ async def root():
                 e.preventDefault();
                 
                 const userIdea = document.getElementById('userIdea').value;
+                const profile = document.querySelector('input[name="profile"]:checked').value;
+                
                 if (!userIdea.trim()) {
                     showStatus('Please enter a project idea', 'error');
                     return;
@@ -312,7 +327,7 @@ async def root():
                     const response = await fetch('/api/generate', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({user_idea: userIdea})
+                        body: JSON.stringify({user_idea: userIdea, profile: profile})
                     });
                     
                     const data = await response.json();
@@ -402,7 +417,7 @@ async def root():
                             const level = levelMapping[docType] || 'cross_level';
                             documentsByLevel[level].documents.push({
                                 type: docType,
-                                display_name: docType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                                display_name: docType.replace(/_/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase()),
                                 file_path: filePath
                             });
                         }
@@ -471,12 +486,14 @@ async def generate_docs(request: GenerationRequest, background_tasks: Background
         background_tasks.add_task(
             run_generation,
             request.user_idea,
-            project_id
+            project_id,
+            request.profile
         )
         
         project_status[project_id] = {
             "status": "in_progress",
             "user_idea": request.user_idea,
+            "profile": request.profile,
             "started_at": datetime.now().isoformat(),
             "completed_agents": []
         }
@@ -490,10 +507,10 @@ async def generate_docs(request: GenerationRequest, background_tasks: Background
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def run_generation(user_idea: str, project_id: str):
+def run_generation(user_idea: str, project_id: str, profile: str = "team"):
     """Run documentation generation in background"""
     try:
-        results = coordinator.generate_all_docs(user_idea, project_id)
+        results = coordinator.generate_all_docs(user_idea, project_id, profile)
         
         project_status[project_id] = {
             "status": "complete",
