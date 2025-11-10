@@ -144,16 +144,29 @@ class OllamaProvider(BaseLLMProvider):
         # Add max_tokens (Ollama uses num_predict)
         payload["options"]["num_predict"] = max_tokens
         
-        # Calculate dynamic timeout based on max_tokens
-        # Estimate: ~0.1-0.2 seconds per token for generation (conservative)
-        # Add buffer for network and processing overhead
-        # Minimum: use configured timeout, Maximum: scale with token count
-        estimated_time = max(
-            self.request_timeout,  # Minimum: configured timeout
-            int(max_tokens * 0.2) + 60  # Estimate: 0.2s per token + 60s buffer
+        # Calculate dynamic timeout based on max_tokens and model
+        # Different models have different generation speeds:
+        # - Fast models (dolphin3, 8B): ~20-50 tokens/sec
+        # - Medium models (llama2, 7B-13B): ~10-30 tokens/sec  
+        # - Slow models (mixtral, 47B): ~5-15 tokens/sec
+        # 
+        # Conservative estimate: assume 10 tokens/second (worst case for large models)
+        # Add 60s buffer for network and processing overhead
+        tokens_per_second = 10  # Conservative estimate for large models
+        estimated_generation_time = int(max_tokens / tokens_per_second) + 60
+        
+        # Use the larger of: configured timeout or estimated time
+        # But cap at reasonable maximum (30 minutes) to prevent excessive waits
+        request_timeout = min(
+            max(self.request_timeout, estimated_generation_time),
+            1800  # Max 30 minutes
         )
-        # Cap at reasonable maximum (30 minutes) to prevent excessive waits
-        request_timeout = min(estimated_time, 1800)  # Max 30 minutes
+        
+        logger.debug(
+            f"Calculated timeout: {request_timeout}s "
+            f"(configured: {self.request_timeout}s, estimated: {estimated_generation_time}s, "
+            f"max_tokens: {max_tokens})"
+        )
         
         # Add any additional options from kwargs
         if "top_p" in kwargs:
