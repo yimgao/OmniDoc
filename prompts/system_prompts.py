@@ -3,6 +3,7 @@ System Prompts Configuration
 All agent prompts centralized here for easy editing
 """
 from typing import Optional
+from src.utils.document_summarizer import summarize_document
 
 # Requirements Analyst Prompt
 REQUIREMENTS_ANALYST_PROMPT = """You are a Requirements Analyst specializing in extracting structured requirements from user ideas.
@@ -94,6 +95,18 @@ TECHNICAL_DOCUMENTATION_PROMPT = """You are a Technical Writer specializing in c
 - Design concrete system architecture with diagrams description
 - This is a TECHNICAL DESIGN document, not a requirements list
 - If you see requirements or user stories below, use them ONLY as reference to design the technical architecture
+
+📊 DIAGRAM REQUIREMENT:
+- Include Mermaid.js diagrams for system architecture, data flow, and component relationships
+- Use code blocks with ```mermaid for all diagrams
+- Generate at minimum: System Architecture diagram, Data Flow diagram
+- Example format:
+  ```mermaid
+  graph TB
+    A[Client] --> B[API Gateway]
+    B --> C[Service 1]
+    B --> D[Service 2]
+  ```
 
 Based on the project requirements, user stories, and project management plan, generate a detailed technical specification document in Markdown format.
 
@@ -422,6 +435,10 @@ The report must include these sections:
    - Priority ranking (High/Medium/Low)
    - Actionable suggestions
    - Examples of better phrasing
+   - For each document, provide specific suggestions in format:
+     * Document: [document_name]
+     * Issues: [list of specific issues]
+     * Suggestions: [actionable improvements]
 
 7. ## Quality Metrics
    - Word count analysis
@@ -604,12 +621,20 @@ def get_pm_prompt(requirements_summary: dict, project_charter_summary: Optional[
     if not project_charter_summary:
         raise ValueError("Level 2 (PM Documentation) REQUIRES Level 1 (Project Charter) output. Cannot proceed without it.")
     
+    # Summarize project charter instead of truncating
+    charter_summary = summarize_document(
+        project_charter_summary,
+        document_type="project charter",
+        target_agent="pm_documentation",
+        focus_areas=["project objectives", "timeline", "budget", "stakeholder information", "business case"]
+    ) if len(project_charter_summary) > 3000 else project_charter_summary
+    
     context_text = f"""
 === LEVEL 2: Product Management Documentation ===
 You are generating Level 2 documentation, which MUST be based on Level 1 (Project Charter) output.
 
 PRIMARY SOURCE - Level 1 Output (Project Charter):
-{project_charter_summary[:3000]}
+{charter_summary}
 
 CRITICAL INSTRUCTIONS:
 1. Extract project objectives, timeline, budget, and stakeholder information from the Project Charter above
@@ -646,21 +671,35 @@ Technical Requirements:
     
     context_text = req_text
     
-    # Add Level 2 outputs if available
+    # Add Level 2 outputs if available (summarized instead of truncated)
     if user_stories_summary:
+        user_stories_processed = summarize_document(
+            user_stories_summary,
+            document_type="user stories",
+            target_agent="technical_documentation",
+            focus_areas=["user workflows", "feature requirements", "acceptance criteria", "user interactions"]
+        ) if len(user_stories_summary) > 2000 else user_stories_summary
+        
         context_text += f"""
 
 User Stories & Epics (Level 2: Product Output) - USE THIS TO DESIGN YOUR SYSTEM:
-{user_stories_summary[:2000]}
+{user_stories_processed}
 
 CRITICAL: Use the user stories to inform technical decisions. Design the system architecture, database, and APIs to SUPPORT these specific user stories. Consider the acceptance criteria when designing APIs and data models.
 """
     
     if pm_summary:
+        pm_processed = summarize_document(
+            pm_summary,
+            document_type="project management plan",
+            target_agent="technical_documentation",
+            focus_areas=["project timeline", "resource requirements", "milestones", "project constraints"]
+        ) if len(pm_summary) > 1500 else pm_summary
+        
         context_text += f"""
 
 Project Management Plan (Level 2: Product Output) - CONSIDER FOR TECHNICAL DECISIONS:
-{pm_summary[:1500]}
+{pm_processed}
 
 Consider the project timeline, resource requirements, and milestones when making 
 technical architecture decisions. Align technical approach with project constraints.
@@ -679,9 +718,15 @@ PRIMARY SOURCES - Level 2 Outputs:
 """
     
     if user_stories_summary:
+        user_stories_processed = summarize_document(
+            user_stories_summary,
+            document_type="user stories",
+            target_agent="technical_documentation"
+        ) if len(user_stories_summary) > 2000 else user_stories_summary
+        
         final_prompt += f"""
 User Stories & Epics (Level 2 Output):
-{user_stories_summary[:2000]}
+{user_stories_processed}
 
 CRITICAL: Use the user stories above to design the technical system. Each user story requires:
 - Specific API endpoints to implement
@@ -690,10 +735,16 @@ CRITICAL: Use the user stories above to design the technical system. Each user s
 """
     
     if pm_summary:
+        pm_processed = summarize_document(
+            pm_summary,
+            document_type="project management plan",
+            target_agent="technical_documentation"
+        ) if len(pm_summary) > 1500 else pm_summary
+        
         final_prompt += f"""
 
 Project Management Plan (Level 2 Output):
-{pm_summary[:1500]}
+{pm_processed}
 
 CRITICAL: Use the PM plan above to inform technical decisions:
 - Align technology choices with timeline and resource constraints
@@ -727,12 +778,20 @@ def get_api_prompt(requirements_summary: dict, technical_summary: Optional[str] 
     if not technical_summary:
         raise ValueError("API Documentation (Level 3) REQUIRES Technical Documentation output. Cannot proceed without it.")
     
+    # Summarize technical documentation instead of truncating
+    tech_summary = summarize_document(
+        technical_summary,
+        document_type="technical documentation",
+        target_agent="api_documentation",
+        focus_areas=["API endpoints and routes", "database schema", "authentication mechanisms", "error handling patterns", "system architecture"]
+    ) if len(technical_summary) > 4000 else technical_summary
+    
     context = f"""
 === LEVEL 3: API Documentation ===
 You are generating Level 3 API documentation, which MUST be based on Technical Documentation output.
 
 PRIMARY SOURCE - Technical Documentation (Level 3):
-{technical_summary[:4000]}
+{tech_summary}
 
 CRITICAL INSTRUCTIONS:
 1. Extract API design patterns, database schema, and system architecture from Technical Documentation above
@@ -768,9 +827,17 @@ You are generating developer documentation based on Level 3 technical outputs.
 PRIMARY SOURCES - Level 3 Outputs:
 """
     
+    # Summarize instead of truncate
+    tech_summary_processed = summarize_document(
+        technical_summary,
+        document_type="technical documentation",
+        target_agent="developer_documentation",
+        focus_areas=["technology stack", "system architecture", "code structure", "development setup requirements", "dependencies"]
+    ) if len(technical_summary) > 4000 else technical_summary
+    
     context += f"""
 Technical Documentation (Level 3):
-{technical_summary[:4000]}
+{tech_summary_processed}
 
 Use the technical specifications above to provide:
 - Setup instructions based on the technology stack specified
@@ -779,10 +846,17 @@ Use the technical specifications above to provide:
 """
     
     if api_summary:
+        api_summary_processed = summarize_document(
+            api_summary,
+            document_type="API documentation",
+            target_agent="developer_documentation",
+            focus_areas=["API endpoints", "request/response formats", "authentication", "code examples"]
+        ) if len(api_summary) > 3000 else api_summary
+        
         context += f"""
 
 API Documentation (Level 3):
-{api_summary[:3000]}
+{api_summary_processed}
 
 Use the API documentation above to provide:
 - Code examples for API integration
@@ -823,11 +897,22 @@ Technical Requirements (simplified):
 
 
 def get_quality_reviewer_prompt(all_documentation: dict) -> str:
-    """Get full quality reviewer prompt with all documentation"""
-    docs_text = "\n\n".join([
-        f"## {doc_name}\n{doc_content[:2000]}..." if len(doc_content) > 2000 else f"## {doc_name}\n{doc_content}"
-        for doc_name, doc_content in all_documentation.items()
-    ])
+    """Get full quality reviewer prompt with all documentation (summarized instead of truncated)"""
+    docs_text_parts = []
+    for doc_name, doc_content in all_documentation.items():
+        # Summarize each document for quality review (focus on completeness and accuracy)
+        if len(doc_content) > 2000:
+            summarized = summarize_document(
+                doc_content,
+                document_type=doc_name,
+                target_agent="quality_reviewer",
+                focus_areas=["complete sections and content", "technical accuracy", "consistency", "completeness"]
+            )
+            docs_text_parts.append(f"## {doc_name}\n{summarized}")
+        else:
+            docs_text_parts.append(f"## {doc_name}\n{doc_content}")
+    
+    docs_text = "\n\n".join(docs_text_parts)
     
     return f"{QUALITY_REVIEWER_PROMPT}\n\n{docs_text}\n\nGenerate the complete quality review report:"
 
@@ -854,12 +939,20 @@ def get_test_prompt(requirements_summary: dict, technical_summary: Optional[str]
     if not technical_summary:
         raise ValueError("Test Documentation REQUIRES Technical Documentation (Level 3) output. Cannot proceed without it.")
     
+    # Summarize technical documentation instead of truncating
+    tech_summary_processed = summarize_document(
+        technical_summary,
+        document_type="technical documentation",
+        target_agent="test_documentation",
+        focus_areas=["API endpoints to test", "database operations", "system components", "architecture for integration tests"]
+    ) if len(technical_summary) > 4000 else technical_summary
+    
     context = f"""
 === Test Documentation (Based on Level 3 Outputs) ===
 You are generating test documentation based on Level 3 Technical Documentation.
 
 PRIMARY SOURCE - Technical Documentation (Level 3):
-{technical_summary[:4000]}
+{tech_summary_processed}
 
 CRITICAL INSTRUCTIONS:
 Design SPECIFIC test cases based on Technical Documentation above:
@@ -1158,7 +1251,7 @@ def get_user_stories_prompt(requirements_summary: dict, project_charter_summary:
 You are generating Level 2 documentation, which MUST be based on Level 1 (Project Charter) output.
 
 PRIMARY SOURCE - Level 1 Output (Project Charter):
-{project_charter_summary[:3000]}
+{summarize_document(project_charter_summary, document_type="project charter", target_agent="user_stories", focus_areas=["business objectives", "project scope", "success criteria", "user needs"]) if len(project_charter_summary) > 3000 else project_charter_summary}
 
 CRITICAL INSTRUCTIONS:
 1. Extract business objectives, project scope, and success criteria from the Project Charter above
@@ -1240,10 +1333,16 @@ The document must include these sections:
    - Data volume and performance expectations
 
 2. ## Entity Relationship Diagram (ERD)
-   - Visual description of entity relationships (in text/ASCII art or Markdown tables)
-   - Entity names and relationships
-   - Cardinality (One-to-One, One-to-Many, Many-to-Many)
-   - Relationship descriptions
+   - MUST include a Mermaid.js ERD diagram showing all tables and relationships
+   - Use ```mermaid code blocks for the ERD
+   - Show all tables, columns, and relationships with cardinality
+   - Example format:
+     ```mermaid
+     erDiagram
+       USERS ||--o{ ORDERS : places
+       ORDERS ||--|{ ORDER_ITEMS : contains
+       PRODUCTS ||--o{ ORDER_ITEMS : "ordered in"
+     ```
 
 3. ## Database Tables
    For each table, provide:
@@ -1317,7 +1416,7 @@ def get_database_schema_prompt(requirements_summary: dict, technical_summary: Op
 You are generating Level 3 database schema, which MUST be based on Technical Documentation output.
 
 PRIMARY SOURCE - Technical Documentation (Level 3):
-{technical_summary[:4000]}
+{summarize_document(technical_summary, document_type="technical documentation", target_agent="database_schema", focus_areas=["database design patterns", "data models", "entity relationships", "database schema"]) if len(technical_summary) > 4000 else technical_summary}
 
 CRITICAL INSTRUCTIONS:
 1. Extract database design patterns, data models, and entity relationships from Technical Documentation above
@@ -1446,7 +1545,7 @@ def get_setup_guide_prompt(requirements_summary: dict, technical_summary: Option
 You are generating setup instructions based on Level 3 technical outputs.
 
 PRIMARY SOURCE - Technical Documentation (Level 3):
-{technical_summary[:3000]}
+{summarize_document(technical_summary, document_type="technical documentation", target_agent="setup_guide", focus_areas=["technology stack", "development setup requirements", "dependencies", "system requirements"]) if len(technical_summary) > 3000 else technical_summary}
 
 CRITICAL INSTRUCTIONS:
 Extract SPECIFIC setup information from Technical Documentation above:
@@ -1457,10 +1556,17 @@ Extract SPECIFIC setup information from Technical Documentation above:
 """
     
     if api_summary:
+        api_summary_processed = summarize_document(
+            api_summary,
+            document_type="API documentation",
+            target_agent="setup_guide",
+            focus_areas=["API endpoints", "testing API endpoints", "setup verification"]
+        ) if len(api_summary) > 1500 else api_summary
+        
         context += f"""
 
 API Documentation (Level 3):
-{api_summary[:1500]}
+{api_summary_processed}
 
 Use API documentation to provide examples of testing API endpoints during setup verification.
 """
@@ -1480,3 +1586,370 @@ CRITICAL REMINDERS:
 Generate the complete Setup Guide based on Technical Documentation:"""
     
     return final_prompt
+
+
+# Marketing Plan Agent Prompt
+MARKETING_PLAN_PROMPT = """You are a Marketing Strategy Specialist. Your task is to create comprehensive marketing documentation including Go-to-Market (GTM) strategy.
+
+The document must include these sections:
+1. ## Executive Summary
+   - Marketing objectives
+   - Target market overview
+   - Key value propositions
+
+2. ## Competitive Analysis
+   - Main competitors identification
+   - Competitive advantages and disadvantages
+   - Market positioning strategy
+   - Differentiation points
+
+3. ## Target User Personas (Marketing-Focused)
+   - Primary target audience
+   - Secondary target audience
+   - Demographics and psychographics
+   - Pain points and motivations
+   - How to reach each persona
+
+4. ## Value Proposition & Core Messaging
+   - Primary value proposition
+   - Key messaging pillars
+   - Unique selling points (USPs)
+   - Brand positioning statement
+
+5. ## Marketing Channels & Tactics
+   - Digital marketing channels (SEO, SEM, social media, email, content)
+   - Traditional marketing channels (if applicable)
+   - Channel-specific strategies
+   - Budget allocation per channel
+
+6. ## Launch Strategy
+   - Pre-launch activities
+   - Launch campaign timeline
+   - Launch event/activities
+   - Post-launch follow-up
+
+7. ## Marketing Metrics & KPIs
+   - Key performance indicators
+   - Success metrics
+   - Measurement methods
+   - Reporting schedule
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Use tables for competitive analysis and channel breakdowns
+- Include specific timelines, budgets, and metrics
+- Be strategic and actionable
+- Base recommendations on the business model and project charter
+
+Now, analyze the following project information and generate the marketing plan:"""
+
+
+# Business Model Agent Prompt
+BUSINESS_MODEL_PROMPT = """You are a Business Strategy Specialist. Your task is to create comprehensive business model documentation.
+
+The document must include these sections:
+1. ## Executive Summary
+   - Business model overview
+   - Value proposition
+   - Target market
+
+2. ## Revenue Models
+   - Primary revenue model (SaaS, one-time, freemium, marketplace, etc.)
+   - Revenue streams breakdown
+   - Revenue projections (if applicable)
+   - Alternative revenue models considered
+
+3. ## Pricing Strategy
+   - Pricing model and tiers
+   - Pricing rationale
+   - Competitive pricing analysis
+   - Discount and promotion strategies
+
+4. ## Key Performance Indicators (KPIs)
+   - Business metrics (MRR, ARR, CAC, LTV, etc.)
+   - Product metrics (MAU, DAU, retention, etc.)
+   - Financial metrics (revenue, profit margins, etc.)
+   - Success criteria and targets
+
+5. ## Cost Analysis
+   - Development costs
+   - Infrastructure and operational costs
+   - Marketing and sales costs
+   - Personnel costs
+   - Break-even analysis
+
+6. ## Business Model Canvas (if applicable)
+   - Key partners
+   - Key activities
+   - Key resources
+   - Value propositions
+   - Customer relationships
+   - Channels
+   - Customer segments
+   - Cost structure
+   - Revenue streams
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Use tables for pricing tiers and cost breakdowns
+- Include specific numbers and projections where possible
+- Be realistic and data-driven
+
+Now, analyze the following project information and generate the business model:"""
+
+
+# Support Playbook Agent Prompt
+SUPPORT_PLAYBOOK_PROMPT = """You are a Customer Support Specialist. Your task is to create comprehensive customer support documentation.
+
+The document must include these sections:
+1. ## Support Channels
+   - Primary support channels (email, chat, phone, forum, etc.)
+   - Channel availability and hours
+   - Channel-specific procedures
+   - Escalation paths
+
+2. ## Service Level Agreements (SLA)
+   - Response time commitments
+   - Resolution time commitments
+   - Priority levels and definitions
+   - SLA for different support tiers
+
+3. ## Internal FAQ for Support Team
+   - Common questions and standard responses
+   - Product-specific knowledge base
+   - Troubleshooting guides
+   - Feature explanations
+
+4. ## Escalation Procedures
+   - When to escalate
+   - Escalation paths
+   - Escalation contacts
+   - Escalation documentation requirements
+
+5. ## Common Issues & Solutions
+   - Frequently encountered problems
+   - Step-by-step solutions
+   - Workarounds
+   - Known issues and status
+
+6. ## Support Tools & Resources
+   - Tools used by support team
+   - Knowledge base resources
+   - Internal documentation links
+   - Training materials
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Use tables for SLA definitions and escalation paths
+- Include specific procedures and scripts
+- Be practical and actionable
+- Base content on user documentation and requirements
+
+Now, analyze the following project information and generate the support playbook:"""
+
+
+# Legal & Compliance Agent Prompt
+LEGAL_COMPLIANCE_PROMPT = """You are a Legal & Compliance Specialist. Your task is to create comprehensive legal and compliance documentation.
+
+The document must include these sections:
+1. ## Privacy Policy
+   - Data collection practices
+   - Data usage and sharing
+   - User rights (access, deletion, portability)
+   - Cookie policy
+   - Data retention policies
+
+2. ## Terms of Service
+   - Service description
+   - User obligations
+   - Service limitations
+   - Intellectual property rights
+   - Liability limitations
+   - Dispute resolution
+
+3. ## GDPR/CCPA Compliance Checklist
+   - GDPR compliance requirements
+   - CCPA compliance requirements
+   - Data processing legal basis
+   - User consent mechanisms
+   - Data breach notification procedures
+   - Compliance checklist items
+
+4. ## Data Handling Procedures
+   - Data collection procedures
+   - Data storage and security
+   - Data access controls
+   - Data deletion procedures
+   - Third-party data sharing
+
+5. ## License Compatibility
+   - Project license
+   - Dependency license review
+   - License compatibility analysis
+   - Open source compliance
+
+6. ## Regulatory Considerations
+   - Industry-specific regulations (if applicable)
+   - Geographic compliance requirements
+   - Export control considerations
+   - Accessibility compliance (ADA, WCAG)
+
+Format requirements:
+- Use clear Markdown headings (## for main sections)
+- Use checklists for compliance items
+- Include legal disclaimers where appropriate
+- Be thorough and accurate
+- Note: This is a draft - should be reviewed by legal counsel
+
+IMPORTANT: This document provides templates and guidance. All legal documents should be reviewed by qualified legal counsel before use.
+
+Now, analyze the following project information and generate the legal compliance documentation:"""
+
+
+def get_marketing_plan_prompt(
+    requirements_summary: dict,
+    project_charter_summary: Optional[str] = None,
+    business_model_summary: Optional[str] = None
+) -> str:
+    """Get marketing plan prompt with requirements, project charter, and business model"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+Core Features: {', '.join(requirements_summary.get('core_features', []))}
+Target Users: {', '.join([p.get('name', 'N/A') for p in requirements_summary.get('user_personas', [])])}
+"""
+    
+    context_text = req_text
+    
+    if project_charter_summary:
+        charter_processed = summarize_document(
+            project_charter_summary,
+            document_type="project charter",
+            target_agent="marketing_plan",
+            focus_areas=["business objectives", "target market", "success criteria", "stakeholders"]
+        ) if len(project_charter_summary) > 3000 else project_charter_summary
+        
+        context_text += f"""
+
+Project Charter (Business Context):
+{charter_processed}
+"""
+    
+    if business_model_summary:
+        business_processed = summarize_document(
+            business_model_summary,
+            document_type="business model",
+            target_agent="marketing_plan",
+            focus_areas=["pricing strategy", "revenue model", "target customers", "value proposition"]
+        ) if len(business_model_summary) > 3000 else business_model_summary
+        
+        context_text += f"""
+
+Business Model:
+{business_processed}
+"""
+    
+    return f"""{MARKETING_PLAN_PROMPT}
+
+{context_text}
+
+Generate the complete marketing plan:"""
+
+
+def get_business_model_prompt(
+    requirements_summary: dict,
+    project_charter_summary: Optional[str] = None
+) -> str:
+    """Get business model prompt with requirements and project charter"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+Core Features: {', '.join(requirements_summary.get('core_features', []))}
+Business Objectives: {', '.join(requirements_summary.get('business_objectives', []))}
+"""
+    
+    context_text = req_text
+    
+    if project_charter_summary:
+        charter_processed = summarize_document(
+            project_charter_summary,
+            document_type="project charter",
+            target_agent="business_model",
+            focus_areas=["business case", "ROI analysis", "market opportunity", "financial projections"]
+        ) if len(project_charter_summary) > 3000 else project_charter_summary
+        
+        context_text += f"""
+
+Project Charter (Business Context):
+{charter_processed}
+"""
+    
+    return f"""{BUSINESS_MODEL_PROMPT}
+
+{context_text}
+
+Generate the complete business model:"""
+
+
+def get_support_playbook_prompt(
+    requirements_summary: dict,
+    user_documentation_summary: Optional[str] = None
+) -> str:
+    """Get support playbook prompt with requirements and user documentation"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+Core Features: {', '.join(requirements_summary.get('core_features', []))}
+"""
+    
+    context_text = req_text
+    
+    if user_documentation_summary:
+        user_doc_processed = summarize_document(
+            user_documentation_summary,
+            document_type="user documentation",
+            target_agent="support_playbook",
+            focus_areas=["user workflows", "common tasks", "feature usage", "troubleshooting"]
+        ) if len(user_documentation_summary) > 3000 else user_documentation_summary
+        
+        context_text += f"""
+
+User Documentation (Reference for Support):
+{user_doc_processed}
+"""
+    
+    return f"""{SUPPORT_PLAYBOOK_PROMPT}
+
+{context_text}
+
+Generate the complete support playbook:"""
+
+
+def get_legal_compliance_prompt(
+    requirements_summary: dict,
+    technical_summary: Optional[str] = None
+) -> str:
+    """Get legal compliance prompt with requirements and technical documentation"""
+    req_text = f"""
+Project Overview: {requirements_summary.get('project_overview', 'N/A')}
+Core Features: {', '.join(requirements_summary.get('core_features', []))}
+"""
+    
+    context_text = req_text
+    
+    if technical_summary:
+        tech_processed = summarize_document(
+            technical_summary,
+            document_type="technical documentation",
+            target_agent="legal_compliance",
+            focus_areas=["data handling", "authentication", "user data storage", "third-party services", "API endpoints"]
+        ) if len(technical_summary) > 3000 else technical_summary
+        
+        context_text += f"""
+
+Technical Documentation (Data Handling Reference):
+{tech_processed}
+"""
+    
+    return f"""{LEGAL_COMPLIANCE_PROMPT}
+
+{context_text}
+
+Generate the complete legal compliance documentation:"""
