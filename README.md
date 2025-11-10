@@ -37,6 +37,7 @@ cp .env.example .env
 LLM_PROVIDER=ollama
 OLLAMA_DEFAULT_MODEL=dolphin3
 OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MAX_TOKENS=8192
 
 # Make sure Ollama is running
 ollama serve
@@ -79,13 +80,18 @@ uv run python -m src.web.app
 ### Core Capabilities
 
 - **20+ Documentation Agents**: Requirements, PM, Technical, API, Developer, Stakeholder, User, Test, Quality Review, Format Converter, Business Model, Marketing Plan, Legal Compliance, Database Schema, Setup Guide, User Stories, Support Playbook, and more
+- **Hybrid Workflow**: 
+  - **Phase 1 (Quality Gates)**: Foundational documents use iterative quality loops (generate → check → improve) to ensure maximum quality
+  - **Phase 2 (Parallel Execution)**: Secondary documents generated in parallel for maximum speed (3x faster)
+  - **Phase 3 (Final Packaging)**: Cross-referencing, quality review, and format conversion
 - **Multi-LLM Support**: 
   - **Ollama** (local, no API key required) - Recommended for development
-  - **Google Gemini** (cloud-based)
+  - **Google Gemini** (cloud-based) - Recommended for production
   - **OpenAI GPT** (cloud-based)
   - Extensible architecture for other providers
+- **Hybrid Mode**: Automatically uses Gemini for critical/complex agents and Ollama for others (80% cost savings)
 - **Format Conversion**: Outputs Markdown, HTML, PDF, DOCX
-- **Quality Assurance**: Automated quality checks and scoring
+- **Quality Assurance**: Automated quality checks with document-type-specific criteria
 - **Parallel Execution**: 3x speedup for independent agents
 - **Web Interface**: FastAPI web app with real-time progress tracking
 - **Error Handling**: Retry logic with exponential backoff
@@ -100,11 +106,13 @@ uv run python -m src.web.app
 - **Ollama Provider**: 
   - Local LLM support (no API costs)
   - Configurable token limits (default: 8192 tokens)
-  - Supports all Ollama models (dolphin3, llama2, mistral, etc.)
-  - Automatic connection handling
+  - Supports all Ollama models (dolphin3, mixtral, llama2, mistral, etc.)
+  - Automatic connection handling with retry logic
+  - Dynamic timeout calculation based on output length
 - **Gemini Provider**:
   - Rate limit handling with automatic retry
   - Support for multiple Gemini models
+  - High-quality output for complex tasks
 - **OpenAI Provider**:
   - Full GPT-4 and GPT-3.5 support
   - Configurable models and parameters
@@ -116,14 +124,14 @@ OmniDoc/
 ├── src/                    # Source code
 │   ├── agents/            # Documentation agents (20+ agents)
 │   ├── context/           # Shared context management (SQLite)
-│   ├── coordination/      # Workflow orchestration
+│   ├── coordination/      # Workflow orchestration (Hybrid Workflow)
 │   ├── llm/               # LLM provider abstractions
 │   │   ├── base_provider.py
 │   │   ├── ollama_provider.py    # Ollama local LLM
 │   │   ├── gemini_provider.py    # Google Gemini
 │   │   ├── openai_provider.py    # OpenAI GPT
 │   │   └── provider_factory.py
-│   ├── quality/           # Quality checking
+│   ├── quality/           # Quality checking (document-type-aware)
 │   ├── rate_limit/        # Rate limiting & caching
 │   ├── utils/             # Utilities (parsers, templates, etc.)
 │   └── web/               # Web interface (FastAPI)
@@ -135,9 +143,8 @@ OmniDoc/
 ├── templates/             # Document templates (Jinja2)
 ├── prompts/               # System prompts (editable)
 ├── scripts/               # Setup and utility scripts
-│   ├── setup.sh           # Main setup script
-│   ├── use-env.sh         # Environment switcher
-│   └── fix-google-import.sh  # Import fixer
+│   └── setup.sh           # Main setup script
+├── examples/              # Usage examples
 ├── .env.example           # Environment template
 ├── pyproject.toml         # Project configuration
 └── README.md              # This file
@@ -147,115 +154,35 @@ OmniDoc/
 
 ### Environment Variables
 
-See [ENV_SETUP.md](ENV_SETUP.md) for detailed configuration guide.
-
 **Key Configuration Options:**
-- `LLM_PROVIDER`: Choose provider (ollama, gemini, openai)
-- `OLLAMA_DEFAULT_MODEL`: Model name for Ollama (default: dolphin3)
-- `OLLAMA_BASE_URL`: Ollama server URL (default: http://localhost:11434)
-- `OLLAMA_MAX_TOKENS`: Max output tokens for Ollama (default: 8192)
+
+**LLM Provider:**
+- `LLM_PROVIDER`: Choose provider (`ollama`, `gemini`, `openai`)
 - `GEMINI_API_KEY`: Gemini API key (if using Gemini)
 - `OPENAI_API_KEY`: OpenAI API key (if using OpenAI)
-- `ENVIRONMENT`: Environment mode (dev, prod, test)
-- `LOG_LEVEL`: Logging level (DEBUG, INFO, WARNING, ERROR)
-- `DOCS_DIR`: Output directory for generated docs
 
-### Switching Environments
+**Ollama Configuration:**
+- `OLLAMA_DEFAULT_MODEL`: Model name for Ollama (default: `dolphin3`)
+- `OLLAMA_BASE_URL`: Ollama server URL (default: `http://localhost:11434`)
+- `OLLAMA_MAX_TOKENS`: Max output tokens for Ollama (default: `8192`)
+- `OLLAMA_TIMEOUT`: Request timeout in seconds (default: `600`)
 
-```bash
-# Switch to development environment
-./scripts/use-env.sh dev
+**Temperature Control:**
+- `TEMPERATURE`: Global temperature (default: `0.7`)
+- `OLLAMA_TEMPERATURE`: Ollama-specific temperature (default: `0.3`)
+- `GEMINI_TEMPERATURE`: Gemini-specific temperature (default: `0.7`)
+- `OPENAI_TEMPERATURE`: OpenAI-specific temperature (default: `0.7`)
 
-# Switch to production environment
-./scripts/use-env.sh prod
+**Document Summarization:**
+- `MAX_SUMMARY_LENGTH`: Maximum summary length in characters (default: `3000`)
 
-# Switch to test environment
-./scripts/use-env.sh test
-```
+**Application Settings:**
+- `ENVIRONMENT`: Environment mode (`dev`, `prod`, `test`)
+- `LOG_LEVEL`: Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
+- `DOCS_DIR`: Output directory for generated docs (default: `docs/`)
+- `RATE_LIMIT_PER_MINUTE`: Rate limit for API calls (default: `60`)
 
-## 📚 Documentation
-
-- **Environment Setup**: See [ENV_SETUP.md](ENV_SETUP.md) for environment configuration
-- **Ollama Token Fix**: See [OLLAMA_TOKEN_FIX.md](OLLAMA_TOKEN_FIX.md) for token limit configuration
-- **Current Status**: See [CURRENT_STATUS.md](CURRENT_STATUS.md) for project status
-- **Generated Docs**: See [docs/README.md](docs/README.md) for generated documentation index
-- **Config Guide**: See [src/config/README.md](src/config/README.md) for configuration details
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-uv run pytest
-
-# Unit tests only (fast)
-uv run pytest tests/unit
-
-# Integration tests
-uv run pytest tests/integration
-
-# E2E tests (requires API key or Ollama)
-uv run pytest tests/e2e
-
-# With coverage
-uv run pytest --cov=src --cov-report=html
-```
-
-**Current Status:** 100+ tests, 82% code coverage
-
-## 🎯 Usage Examples
-
-### Generate All Documentation
-
-```bash
-# Using CLI
-uv run python -c "
-from src.coordination.coordinator import WorkflowCoordinator
-coordinator = WorkflowCoordinator()
-results = coordinator.generate_all_docs('Build a blog platform with user authentication')
-"
-```
-
-Or in a Python script:
-```python
-from src.coordination.coordinator import WorkflowCoordinator
-
-coordinator = WorkflowCoordinator()
-results = coordinator.generate_all_docs(
-    "Build a blog platform with user authentication"
-)
-
-# Generates 20+ document types:
-# - Requirements
-# - Project Charter
-# - Business Model
-# - Marketing Plan
-# - PM Plan
-# - User Stories
-# - Technical Spec
-# - API Documentation
-# - Database Schema
-# - Developer Guide
-# - Setup Guide
-# - Stakeholder Summary
-# - User Guide
-# - Test Plan
-# - Legal Compliance
-# - Support Playbook
-# - Quality Review
-# - Format conversions (HTML, PDF, DOCX)
-```
-
-### Use Web Interface
-
-```bash
-# Start the web server
-uv run python -m src.web.app
-
-# Visit http://localhost:8000
-# Enter your project idea and generate docs!
-```
-
-### Switch LLM Provider
+### Switching LLM Providers
 
 #### Method 1: Edit .env File (Recommended)
 
@@ -270,37 +197,26 @@ OLLAMA_DEFAULT_MODEL=dolphin3
 # For Gemini (cloud)
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# For OpenAI (cloud)
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-#### Method 2: Use Switch Scripts
-
-```bash
-# Switch to Ollama
-./scripts/switch-to-ollama.sh
-
-# Switch to Gemini
-./scripts/switch-to-gemini.sh
-
-# Check current provider
-./scripts/check-llm-provider.sh
-```
-
-#### Method 3: In Code
+#### Method 2: In Code
 
 ```python
 # Use Ollama (local)
-from src.agents.requirements_analyst import RequirementsAnalyst
+from src.coordination.coordinator import WorkflowCoordinator
 
-agent = RequirementsAnalyst(provider_name="ollama")
+coordinator = WorkflowCoordinator(provider_name="ollama")
 
 # Use Gemini (cloud)
-agent = RequirementsAnalyst(provider_name="gemini")
+coordinator = WorkflowCoordinator(provider_name="gemini")
 
 # Use OpenAI (cloud)
-agent = RequirementsAnalyst(provider_name="openai")
+coordinator = WorkflowCoordinator(provider_name="openai")
 ```
-
-**See [SWITCH_LLM_PROVIDER.md](SWITCH_LLM_PROVIDER.md) for detailed switching guide.**
 
 #### Hybrid Mode (Mixed Providers) - Recommended for Production
 
@@ -333,11 +249,90 @@ coordinator = WorkflowCoordinator(
 )
 ```
 
-**See [HYBRID_MODE_GUIDE.md](HYBRID_MODE_GUIDE.md) for detailed hybrid mode guide.**
+## 🎯 Usage Examples
+
+### Generate All Documentation
+
+```bash
+# Using CLI
+uv run python -c "
+from src.coordination.coordinator import WorkflowCoordinator
+coordinator = WorkflowCoordinator()
+results = coordinator.generate_all_docs('Build a blog platform with user authentication')
+"
+```
+
+Or in a Python script:
+```python
+from src.coordination.coordinator import WorkflowCoordinator
+
+coordinator = WorkflowCoordinator()
+results = coordinator.generate_all_docs(
+    user_idea="Build a blog platform with user authentication",
+    profile="team"  # or "individual"
+)
+
+# Generates 20+ document types using Hybrid Workflow:
+# Phase 1 (Quality Gates):
+# - Requirements (iterative quality loop)
+# - Project Charter (team only, iterative quality loop)
+# - User Stories (iterative quality loop)
+# - Technical Specification (iterative quality loop)
+#
+# Phase 2 (Parallel Execution):
+# - API Documentation
+# - Database Schema
+# - Setup Guide
+# - Developer Guide
+# - Test Plan
+# - User Guide
+# - Legal Compliance
+# - PM Plan (team only)
+# - Stakeholder Summary (team only)
+# - Business Model (team only)
+# - Marketing Plan (team only)
+# - Support Playbook
+#
+# Phase 3 (Final Packaging):
+# - Cross-referencing
+# - Quality Review
+# - Format conversions (HTML, PDF, DOCX)
+```
+
+### Use Web Interface
+
+```bash
+# Start the web server
+uv run python -m src.web.app
+
+# Visit http://localhost:8000
+# Enter your project idea and generate docs!
+```
 
 ### Multiple Provider Example
 
 See [examples/multi_provider_example.py](examples/multi_provider_example.py) for examples of using different providers.
+
+## 🧪 Testing
+
+```bash
+# Run all tests
+uv run pytest
+
+# Unit tests only (fast)
+uv run pytest tests/unit
+
+# Integration tests
+uv run pytest tests/integration
+
+# E2E tests (requires API key or Ollama)
+uv run pytest tests/e2e
+
+# With coverage
+uv run pytest --cov=src --cov-report=html
+```
+
+**Current Status:** 100+ tests, 82% code coverage
 
 ## 🛠️ Development
 
@@ -387,22 +382,62 @@ ollama list
 
 # Pull the model if needed
 ollama pull dolphin3
+
+# For better quality, use a larger model
+ollama pull mixtral
+# Then update .env: OLLAMA_DEFAULT_MODEL=mixtral
+```
+
+### Ollama Timeout Errors
+
+If you see timeout errors with Ollama:
+
+```bash
+# Increase timeout in .env
+OLLAMA_TIMEOUT=1200  # 20 minutes
+
+# Or use a faster model
+OLLAMA_DEFAULT_MODEL=dolphin3  # Smaller, faster model
+```
+
+### Ollama 500 Errors
+
+If you see 500 Internal Server Error from Ollama:
+
+```bash
+# Check Ollama logs
+ollama serve
+
+# Verify model is properly loaded
+ollama list
+
+# Try restarting Ollama
+# On macOS/Linux: pkill ollama && ollama serve
+# On Windows: Stop Ollama service and restart
+
+# Use a smaller model if memory is limited
+ollama pull dolphin3
 ```
 
 ### Google GenerativeAI Import Error
 
 ```bash
-# Run the fix script
-./scripts/fix-google-import.sh
-
-# Or manually fix
+# Fix the import error
 pip uninstall google -y
 pip install google-generativeai
+
+# Or reinstall all dependencies
+uv sync
 ```
 
-### Environment Configuration
+### Low Quality Scores
 
-See [ENV_SETUP.md](ENV_SETUP.md) for detailed troubleshooting guide.
+If generated documents have low quality scores:
+
+1. **Use a better model**: Switch to Gemini or upgrade Ollama model (e.g., `mixtral`)
+2. **Enable Hybrid Mode**: Use Gemini for critical agents, Ollama for others
+3. **Adjust temperature**: Lower temperature (0.3) for more consistent output
+4. **Check quality thresholds**: Quality gates in Phase 1 will automatically improve documents
 
 ## 📦 Dependencies
 
@@ -441,16 +476,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Built with multi-agent collaboration
 - Supports multiple LLM providers for flexibility
 - Designed for comprehensive documentation generation
-
-## 🔗 Related Documentation
-
-- [Environment Setup Guide](ENV_SETUP.md)
-- [Switch LLM Provider Guide](SWITCH_LLM_PROVIDER.md) - How to switch between Gemini and Ollama
-- [Hybrid Mode Guide](HYBRID_MODE_GUIDE.md) - **Recommended**: Mix Gemini (quality) and Ollama (cost)
-- [Ollama Token Fix Documentation](OLLAMA_TOKEN_FIX.md)
-- [Quality Scores Analysis](QUALITY_SCORES_ANALYSIS.md)
-- [Configuration Guide](src/config/README.md)
-- [Current Project Status](CURRENT_STATUS.md)
+- Hybrid workflow ensures both quality and speed
 
 ---
 
@@ -458,3 +484,9 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Use `uv run <command>` to run commands in the project environment
 - No need to activate virtual environment manually
 - Dependencies are managed via `pyproject.toml`
+
+## 📚 Additional Resources
+
+- **Configuration Guide**: See [src/config/README.md](src/config/README.md) for detailed configuration options
+- **Examples**: See [examples/](examples/) directory for usage examples
+- **Generated Docs**: See [docs/](docs/) directory for generated documentation index
