@@ -58,6 +58,9 @@ Thumbs.db
 # Markdown files in root (except README)
 *.md
 !README.md
+!IMPROVEMENT_ROADMAP.md
+!TEST_PROMPT.md
+!CHANGELOG.md
 
 
 # Documentation files (organized in docs/)
