@@ -71,6 +71,8 @@ class BaseAgent(ABC):
                     provider_kwargs["default_model"] = model_name
                 elif provider_name == "openai":
                     provider_kwargs["default_model"] = model_name
+                elif provider_name == "ollama":
+                    provider_kwargs["default_model"] = model_name
             
             self.llm_provider = ProviderFactory.create(
                 provider_name=provider_name,

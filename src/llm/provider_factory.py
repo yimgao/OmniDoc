@@ -7,6 +7,7 @@ from typing import Optional, Dict, Type
 from src.llm.base_provider import BaseLLMProvider
 from src.llm.gemini_provider import GeminiProvider
 from src.llm.openai_provider import OpenAIProvider
+from src.llm.ollama_provider import OllamaProvider
 
 
 class ProviderFactory:
@@ -16,6 +17,7 @@ class ProviderFactory:
     _providers: Dict[str, Type[BaseLLMProvider]] = {
         "gemini": GeminiProvider,
         "openai": OpenAIProvider,
+        "ollama": OllamaProvider,
     }
     
     @classmethod
