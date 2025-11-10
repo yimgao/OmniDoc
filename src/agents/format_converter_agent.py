@@ -98,6 +98,8 @@ AGENT_TYPE_TO_FOLDER = {
     "requirements_analyst": "requirements",
     "stakeholder_communication": "stakeholder",
     "project_charter": "charter",
+    "business_model": "business",
+    "marketing_plan": "marketing",
     
     # Level 2: Product (Product Manager)
     "pm_documentation": "pm",
@@ -108,11 +110,13 @@ AGENT_TYPE_TO_FOLDER = {
     "api_documentation": "api",
     "database_schema": "database",
     "setup_guide": "setup",
+    "legal_compliance": "legal",
     
     # Cross-Level
     "developer_documentation": "developer",
     "user_documentation": "user",
     "test_documentation": "test",
+    "support_playbook": "support",
     "quality_reviewer": "quality",
 }
 
@@ -207,12 +211,29 @@ class FormatConverterAgent(BaseAgent):
             # Fix any remaining italic syntax (*text* or _text_)
             html_content = re.sub(r'(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)', r'<em>\1</em>', html_content)
             html_content = re.sub(r'(?<!_)_(?!_)([^_]+?)(?<!_)_(?!_)', r'<em>\1</em>', html_content)
-            # Wrap in proper HTML structure with enhanced styling
+            # Add Mermaid.js support for diagrams
+            # Replace mermaid code blocks with divs that Mermaid.js can render
+            mermaid_pattern = r'```mermaid\n(.*?)```'
+            mermaid_blocks = re.findall(mermaid_pattern, markdown_content, re.DOTALL)
+            if mermaid_blocks:
+                logger.debug(f"Found {len(mermaid_blocks)} Mermaid diagram(s) to render")
+                # Replace mermaid code blocks with divs
+                html_content = re.sub(
+                    mermaid_pattern,
+                    lambda m: f'<div class="mermaid">\n{m.group(1).strip()}\n</div>',
+                    html_content,
+                    flags=re.DOTALL
+                )
+            
+            # Wrap in proper HTML structure with enhanced styling and Mermaid.js
+            mermaid_script = '<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>\n    <script>mermaid.initialize({startOnLoad:true, theme:"default"});</script>' if mermaid_blocks else ''
+            
             full_html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {mermaid_script}
     <title>Documentation</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -247,6 +268,14 @@ class FormatConverterAgent(BaseAgent):
             margin: 1em 0;
         }}
         pre code {{ background-color: transparent; padding: 0; color: #333; }}
+        .mermaid {{
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin: 1.5em 0;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }}
         table {{
             border-collapse: collapse;
             width: 100%;
