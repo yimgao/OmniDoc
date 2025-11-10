@@ -6,6 +6,8 @@ from typing import Optional, Dict, List
 from datetime import datetime
 from pathlib import Path
 import uuid
+import os
+import re
 
 from src.context.context_manager import ContextManager
 from src.context.shared_context import AgentType, DocumentStatus, SharedContext
@@ -28,6 +30,11 @@ from src.agents.project_charter_agent import ProjectCharterAgent
 from src.agents.user_stories_agent import UserStoriesAgent
 from src.agents.database_schema_agent import DatabaseSchemaAgent
 from src.agents.setup_guide_agent import SetupGuideAgent
+from src.agents.marketing_plan_agent import MarketingPlanAgent
+from src.agents.business_model_agent import BusinessModelAgent
+from src.agents.support_playbook_agent import SupportPlaybookAgent
+from src.agents.legal_compliance_agent import LegalComplianceAgent
+from src.agents.document_improver_agent import DocumentImproverAgent
 from src.utils.file_manager import FileManager
 from src.utils.cross_referencer import CrossReferencer
 from src.utils.parallel_executor import ParallelExecutor, TaskStatus
@@ -91,7 +98,16 @@ class WorkflowCoordinator:
         self.database_schema_agent = DatabaseSchemaAgent(rate_limiter=self.rate_limiter)
         self.setup_guide_agent = SetupGuideAgent(rate_limiter=self.rate_limiter)
         
-        logger.info("WorkflowCoordinator initialized with all agents (including new Level 1-3 agents)")
+        # Business & Marketing agents
+        self.marketing_plan_agent = MarketingPlanAgent(rate_limiter=self.rate_limiter)
+        self.business_model_agent = BusinessModelAgent(rate_limiter=self.rate_limiter)
+        self.support_playbook_agent = SupportPlaybookAgent(rate_limiter=self.rate_limiter)
+        self.legal_compliance_agent = LegalComplianceAgent(rate_limiter=self.rate_limiter)
+        
+        # Document improvement agent (for auto-fix loop)
+        self.document_improver = DocumentImproverAgent(rate_limiter=self.rate_limiter)
+        
+        logger.info("WorkflowCoordinator initialized with all agents (including business/marketing agents and auto-fix)")
     
     def _generate_technical_doc(self, req_summary, project_id):
         """Helper for parallel technical doc generation"""
@@ -382,7 +398,76 @@ class WorkflowCoordinator:
             results["status"]["user_documentation"] = "complete"
             logger.info(f"Step 15 completed: User documentation saved to {user_doc_path}")
             
-            # Step 16: Collect all documentation for cross-referencing and quality review
+            # Step 16: Business Model Agent (uses Project Charter)
+            if profile == "team":
+                doc_level = get_document_level("business_model")
+                logger.info(f"Step 16 (Team): Starting Business Model Agent ({doc_level.value})")
+                business_model_path = self.business_model_agent.generate_and_save(
+                    requirements_summary=req_summary,
+                    project_charter_summary=charter_summary,
+                    output_filename="business_model.md",
+                    project_id=project_id,
+                    context_manager=self.context_manager
+                )
+                results["files"]["business_model"] = business_model_path
+                results["status"]["business_model"] = "complete"
+                logger.info(f"Step 16 (Team) completed: Business Model saved to {business_model_path}")
+            else:
+                logger.info(f"Step 16 (Individual): Skipping Business Model")
+                results["status"]["business_model"] = "skipped"
+            
+            # Step 17: Marketing Plan Agent (uses Business Model and Project Charter)
+            if profile == "team":
+                doc_level = get_document_level("marketing_plan")
+                logger.info(f"Step 17 (Team): Starting Marketing Plan Agent ({doc_level.value})")
+                business_model_output = self.context_manager.get_agent_output(project_id, AgentType.BUSINESS_MODEL)
+                business_model_summary = business_model_output.content if business_model_output else None
+                marketing_path = self.marketing_plan_agent.generate_and_save(
+                    requirements_summary=req_summary,
+                    project_charter_summary=charter_summary,
+                    business_model_summary=business_model_summary,
+                    output_filename="marketing_plan.md",
+                    project_id=project_id,
+                    context_manager=self.context_manager
+                )
+                results["files"]["marketing_plan"] = marketing_path
+                results["status"]["marketing_plan"] = "complete"
+                logger.info(f"Step 17 (Team) completed: Marketing Plan saved to {marketing_path}")
+            else:
+                logger.info(f"Step 17 (Individual): Skipping Marketing Plan")
+                results["status"]["marketing_plan"] = "skipped"
+            
+            # Step 18: Support Playbook Agent (uses User Documentation)
+            doc_level = get_document_level("support_playbook")
+            logger.info(f"Step 18: Starting Support Playbook Agent ({doc_level.value})")
+            user_doc_output = self.context_manager.get_agent_output(project_id, AgentType.USER_DOCUMENTATION)
+            user_doc_summary = user_doc_output.content if user_doc_output else None
+            support_path = self.support_playbook_agent.generate_and_save(
+                requirements_summary=req_summary,
+                user_documentation_summary=user_doc_summary,
+                output_filename="support_playbook.md",
+                project_id=project_id,
+                context_manager=self.context_manager
+            )
+            results["files"]["support_playbook"] = support_path
+            results["status"]["support_playbook"] = "complete"
+            logger.info(f"Step 18 completed: Support Playbook saved to {support_path}")
+            
+            # Step 19: Legal & Compliance Agent (uses Technical Documentation)
+            doc_level = get_document_level("legal_compliance")
+            logger.info(f"Step 19: Starting Legal & Compliance Agent ({doc_level.value})")
+            legal_path = self.legal_compliance_agent.generate_and_save(
+                requirements_summary=req_summary,
+                technical_summary=technical_summary,
+                output_filename="legal_compliance.md",
+                project_id=project_id,
+                context_manager=self.context_manager
+            )
+            results["files"]["legal_compliance"] = legal_path
+            results["status"]["legal_compliance"] = "complete"
+            logger.info(f"Step 19 completed: Legal & Compliance saved to {legal_path}")
+            
+            # Step 20: Collect all documentation for cross-referencing and quality review
             all_documentation = {}
             document_agent_types = {}
             document_file_paths = {}
@@ -400,7 +485,11 @@ class WorkflowCoordinator:
                 "developer_documentation": AgentType.DEVELOPER_DOCUMENTATION,
                 "stakeholder_documentation": AgentType.STAKEHOLDER_COMMUNICATION,
                 "user_documentation": AgentType.USER_DOCUMENTATION,
-                "test_documentation": AgentType.TEST_DOCUMENTATION
+                "test_documentation": AgentType.TEST_DOCUMENTATION,
+                "business_model": AgentType.BUSINESS_MODEL,
+                "marketing_plan": AgentType.MARKETING_PLAN,
+                "support_playbook": AgentType.SUPPORT_PLAYBOOK,
+                "legal_compliance": AgentType.LEGAL_COMPLIANCE
             }
             
             for doc_type, file_path in results["files"].items():
@@ -475,6 +564,73 @@ class WorkflowCoordinator:
             )
             results["files"]["quality_review"] = quality_review_path
             results["status"]["quality_review"] = "complete"
+            
+            # Step 17.25: Auto-Fix Loop (Optional - can be enabled via settings)
+            # Read quality review and automatically improve documents with low scores
+            try:
+                from src.config.settings import get_settings
+                settings = get_settings()
+                enable_auto_fix = getattr(settings, 'enable_auto_fix', False) or os.getenv("ENABLE_AUTO_FIX", "false").lower() == "true"
+                
+                if enable_auto_fix:
+                    logger.info("Auto-Fix Loop: Analyzing quality review and improving documents")
+                    quality_review_content = self.file_manager.read_file(quality_review_path)
+                    
+                    # Extract quality scores and identify documents that need improvement
+                    # Look for documents with scores < 70 or "High" priority issues
+                    score_pattern = r'Overall Quality Score:\s*(\d+)/100'
+                    scores = re.findall(score_pattern, quality_review_content)
+                    
+                    # If overall score is low or specific documents have issues, improve them
+                    overall_score = int(scores[0]) if scores else 100
+                    
+                    if overall_score < 70:
+                        logger.info(f"Overall quality score is {overall_score}/100, triggering auto-fix loop")
+                        
+                        # Improve key documents (prioritize technical and API docs)
+                        documents_to_improve = [
+                            (AgentType.TECHNICAL_DOCUMENTATION, "technical_documentation", "Technical Specification"),
+                            (AgentType.API_DOCUMENTATION, "api_documentation", "API Documentation"),
+                            (AgentType.DATABASE_SCHEMA, "database_schema", "Database Schema"),
+                        ]
+                        
+                        improved_count = 0
+                        for agent_type, doc_key, doc_name in documents_to_improve:
+                            if agent_type in all_documentation:
+                                try:
+                                    original_doc = all_documentation[agent_type]
+                                    original_file_path = document_file_paths.get(agent_type)
+                                    
+                                    if original_file_path:
+                                        logger.info(f"Auto-improving {doc_name}...")
+                                        improved_path = self.document_improver.improve_and_save(
+                                            original_document=original_doc,
+                                            document_type=doc_key,
+                                            quality_feedback=quality_review_content,
+                                            output_filename=Path(original_file_path).name,
+                                            project_id=project_id,
+                                            context_manager=self.context_manager,
+                                            agent_type=agent_type
+                                        )
+                                        
+                                        # Update all_documentation with improved version
+                                        improved_content = self.file_manager.read_file(improved_path)
+                                        all_documentation[agent_type] = improved_content
+                                        document_file_paths[agent_type] = improved_path
+                                        improved_count += 1
+                                        logger.info(f"✅ Improved {doc_name}")
+                                except Exception as e:
+                                    logger.warning(f"Could not improve {doc_name}: {e}")
+                        
+                        if improved_count > 0:
+                            logger.info(f"Auto-Fix Loop: Improved {improved_count} documents")
+                            results["status"]["auto_fix"] = f"improved {improved_count} documents"
+                        else:
+                            logger.info("Auto-Fix Loop: No documents needed improvement")
+                    else:
+                        logger.info(f"Quality score is {overall_score}/100, skipping auto-fix (threshold: 70)")
+            except Exception as e:
+                logger.warning(f"Auto-Fix Loop failed: {e}, continuing with workflow")
             
             # Step 17.5: Generate Claude CLI Documentation
             logger.info("Generating Claude CLI Documentation")
