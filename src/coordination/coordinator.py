@@ -40,6 +40,13 @@ from src.utils.cross_referencer import CrossReferencer
 from src.utils.parallel_executor import ParallelExecutor, TaskStatus
 from src.rate_limit.queue_manager import RequestQueue
 from src.utils.document_organizer import format_documents_by_level, get_documents_summary, get_document_level, get_document_display_name
+from src.coordination.workflow_dag import (
+    get_phase2_tasks_for_profile,
+    build_task_dependencies,
+    build_kwargs_for_task,
+    get_agent_for_task,
+    Phase2Task
+)
 
 
 class WorkflowCoordinator:
@@ -524,208 +531,134 @@ Improvement Suggestions:
             # Get technical summary for Phase 2
             technical_summary = tech_content
             
-            # --- PHASE 2: PARALLEL GENERATION (Executor) ---
+            # --- PHASE 2: PARALLEL GENERATION (DAG-based) ---
             logger.info("=" * 80)
-            logger.info("--- PHASE 2: Generating Secondary Documents (Parallel) ---")
+            logger.info("--- PHASE 2: Generating Secondary Documents (Parallel DAG) ---")
             logger.info("=" * 80)
             
-            executor = ParallelExecutor(max_workers=8)  # Increase parallelization for Gemini API
+            # Get Phase 2 task configurations from DAG
+            phase2_tasks = get_phase2_tasks_for_profile(profile=profile)
+            logger.info(f"📋 Phase 2 DAG: {len(phase2_tasks)} tasks for profile '{profile}'")
             
-            # Get API summary (will be generated in parallel, but we need to handle dependencies)
-            # For now, API doc depends on technical, so we'll generate it first, then use it for others
+            # Build dependency map (AgentType -> task_id dependencies)
+            dependency_map = build_task_dependencies(phase2_tasks)
             
-            # L3 Tech Agents (depend on technical_documentation)
-            # API and DB Schema can run in parallel (both depend only on technical)
-            executor.add_task(
-                "api_doc",
-                self.api_agent.generate_and_save,
-                args=(req_summary, technical_summary, "api_documentation.md", project_id, self.context_manager),
-                dependencies=[]
-            )
-            executor.add_task(
-                "db_schema",
-                self.database_schema_agent.generate_and_save,
-                args=(req_summary, technical_summary, "database_schema.md", project_id, self.context_manager),
-                dependencies=[]
-            )
-            
-            # Helper functions to handle dependencies (fetch from context after dependent task completes)
-            # These are defined inside the method so they have access to 'self'
-            def generate_setup_guide_with_api():
-                """Generate setup guide, fetching API summary from context after api_doc completes"""
-                api_output = self.context_manager.get_agent_output(project_id, AgentType.API_DOCUMENTATION)
-                api_summary = api_output.content if api_output else None
-                return self.setup_guide_agent.generate_and_save(
-                    requirements_summary=req_summary,
-                    technical_summary=technical_summary,
-                    api_summary=api_summary,
-                    output_filename="setup_guide.md",
-                    project_id=project_id,
-                    context_manager=self.context_manager
-                )
-            
-            def generate_dev_doc_with_api():
-                """Generate developer doc, fetching API summary from context after api_doc completes"""
-                api_output = self.context_manager.get_agent_output(project_id, AgentType.API_DOCUMENTATION)
-                api_summary = api_output.content if api_output else None
-                return self.developer_agent.generate_and_save(
-                    requirements_summary=req_summary,
-                    technical_summary=technical_summary,
-                    api_summary=api_summary,
-                    output_filename="developer_guide.md",
-                    project_id=project_id,
-                    context_manager=self.context_manager
-                )
-            
-            # Setup guide and developer doc depend on API doc
-            executor.add_task(
-                "setup_guide",
-                generate_setup_guide_with_api,
-                args=(),
-                dependencies=["api_doc"]
-            )
-            executor.add_task(
-                "dev_doc",
-                generate_dev_doc_with_api,
-                args=(),
-                dependencies=["api_doc"]
-            )
-            executor.add_task(
-                "test_doc",
-                self.test_agent.generate_and_save,
-                args=(req_summary, technical_summary, "test_plan.md", project_id, self.context_manager),
-                dependencies=[]
-            )
-            executor.add_task(
-                "user_doc",
-                self.user_agent.generate_and_save,
-                args=(req_summary, "user_guide.md", project_id, self.context_manager),
-                dependencies=[]
-            )
-            executor.add_task(
-                "legal_doc",
-                self.legal_compliance_agent.generate_and_save,
-                args=(req_summary, technical_summary, "legal_compliance.md", project_id, self.context_manager),
-                dependencies=[]
-            )
-            
-            # L1/L2 Business Agents (Team Only)
-            if profile == "team":
-                # PM Documentation (depends on project_charter, but charter is already done in Phase 1)
-                executor.add_task(
-                    "pm_doc",
-                    self.pm_agent.generate_and_save,
-                    args=(req_summary, charter_content, "project_plan.md", project_id, self.context_manager),
-                    dependencies=[]
-                )
-                
-                def generate_stakeholder_with_pm():
-                    """Generate stakeholder doc, fetching PM summary from context after pm_doc completes"""
-                    pm_output = self.context_manager.get_agent_output(project_id, AgentType.PM_DOCUMENTATION)
-                    pm_summary = pm_output.content if pm_output else None
-                    return self.stakeholder_agent.generate_and_save(
-                        requirements_summary=req_summary,
-                        pm_summary=pm_summary,
-                        output_filename="stakeholder_summary.md",
-                        project_id=project_id,
-                        context_manager=self.context_manager
-                    )
-                
-                executor.add_task(
-                    "stakeholder_doc",
-                    generate_stakeholder_with_pm,
-                    args=(),
-                    dependencies=["pm_doc"]  # Stakeholder depends on PM doc
-                )
-                
-                executor.add_task(
-                    "business_model",
-                    self.business_model_agent.generate_and_save,
-                    args=(req_summary, charter_content, "business_model.md", project_id, self.context_manager),
-                    dependencies=[]
-                )
-                
-                def generate_marketing_with_business():
-                    """Generate marketing plan, fetching business model from context after business_model completes"""
-                    business_output = self.context_manager.get_agent_output(project_id, AgentType.BUSINESS_MODEL)
-                    business_model_summary = business_output.content if business_output else None
-                    return self.marketing_plan_agent.generate_and_save(
-                        requirements_summary=req_summary,
-                        project_charter_summary=charter_content,
-                        business_model_summary=business_model_summary,
-                        output_filename="marketing_plan.md",
-                        project_id=project_id,
-                        context_manager=self.context_manager
-                    )
-                
-                executor.add_task(
-                    "marketing_plan",
-                    generate_marketing_with_business,
-                    args=(),
-                    dependencies=["business_model"]  # Marketing depends on business model
-                )
-            
-            def generate_support_with_user_doc():
-                """Generate support playbook, fetching user doc from context after user_doc completes"""
-                user_doc_output = self.context_manager.get_agent_output(project_id, AgentType.USER_DOCUMENTATION)
-                user_doc_summary = user_doc_output.content if user_doc_output else None
-                return self.support_playbook_agent.generate_and_save(
-                    requirements_summary=req_summary,
-                    user_documentation_summary=user_doc_summary,
-                    output_filename="support_playbook.md",
-                    project_id=project_id,
-                    context_manager=self.context_manager
-                )
-            
-            executor.add_task(
-                "support_playbook",
-                generate_support_with_user_doc,
-                args=(),
-                dependencies=["user_doc"]
-            )
-            
-            # Execute parallel tasks
-            logger.info(f"🚀 Executing {len(executor.tasks)} parallel tasks...")
-            parallel_results = executor.execute()
-            
-            # Map task IDs to document types and agent types
-            task_id_to_doc_type = {
-                "api_doc": ("api_documentation", AgentType.API_DOCUMENTATION),
-                "db_schema": ("database_schema", AgentType.DATABASE_SCHEMA),
-                "setup_guide": ("setup_guide", AgentType.SETUP_GUIDE),
-                "dev_doc": ("developer_documentation", AgentType.DEVELOPER_DOCUMENTATION),
-                "test_doc": ("test_documentation", AgentType.TEST_DOCUMENTATION),
-                "user_doc": ("user_documentation", AgentType.USER_DOCUMENTATION),
-                "legal_doc": ("legal_compliance", AgentType.LEGAL_COMPLIANCE),
-                "pm_doc": ("pm_documentation", AgentType.PM_DOCUMENTATION),
-                "stakeholder_doc": ("stakeholder_documentation", AgentType.STAKEHOLDER_COMMUNICATION),
-                "business_model": ("business_model", AgentType.BUSINESS_MODEL),
-                "marketing_plan": ("marketing_plan", AgentType.MARKETING_PLAN),
-                "support_playbook": ("support_playbook", AgentType.SUPPORT_PLAYBOOK),
+            # Prepare Phase 1 content for dependency extraction
+            # Phase 1 documents are already complete, so we can use their content directly
+            phase1_deps_content = {
+                AgentType.REQUIREMENTS_ANALYST: req_content,
+                AgentType.TECHNICAL_DOCUMENTATION: technical_summary,
+                AgentType.PROJECT_CHARTER: charter_content if charter_content else None,
+                AgentType.USER_STORIES: stories_content,
             }
             
+            # Create executor
+            executor = ParallelExecutor(max_workers=8)
+            
+            # Create task execution functions for each Phase 2 task
+            # These functions will extract dependencies from context when executed
+            def create_task_executor(task: Phase2Task):
+                """Create a task executor function that extracts dependencies from context"""
+                def execute_task():
+                    # Extract dependency content from context (for Phase 2 dependencies)
+                    # Phase 1 dependencies are already available in phase1_deps_content
+                    deps_content = phase1_deps_content.copy()
+                    
+                    # Get Phase 2 dependencies from context (these are completed in Phase 2)
+                    for dep_type in task.dependencies:
+                        if dep_type not in deps_content:
+                            # This is a Phase 2 dependency, fetch from context
+                            dep_output = self.context_manager.get_agent_output(project_id, dep_type)
+                            if dep_output:
+                                deps_content[dep_type] = dep_output.content
+                            else:
+                                # Dependency not yet available (shouldn't happen if dependencies are correct)
+                                logger.warning(f"  ⚠️  Dependency {dep_type.value} not found in context for {task.task_id}")
+                                deps_content[dep_type] = None
+                    
+                    # Build kwargs for agent.generate_and_save
+                    kwargs = build_kwargs_for_task(
+                        task=task,
+                        coordinator=self,
+                        req_summary=req_summary,
+                        technical_summary=technical_summary,
+                        charter_content=charter_content,
+                        project_id=project_id,
+                        context_manager=self.context_manager,
+                        deps_content=deps_content
+                    )
+                    
+                    # Get agent instance
+                    agent = get_agent_for_task(self, task.agent_type)
+                    if not agent:
+                        raise ValueError(f"Agent not found for {task.agent_type.value}")
+                    
+                    # Execute agent
+                    return agent.generate_and_save(**kwargs)
+                
+                return execute_task
+            
+            # Add all tasks to executor
+            for task in phase2_tasks:
+                task_executor = create_task_executor(task)
+                dep_task_ids = dependency_map.get(task.task_id, [])
+                
+                executor.add_task(
+                    task_id=task.task_id,
+                    func=task_executor,
+                    args=(),
+                    dependencies=dep_task_ids
+                )
+                logger.debug(f"  📝 Added task: {task.task_id} (depends on: {dep_task_ids})")
+            
+            # Execute parallel tasks
+            logger.info(f"🚀 Executing {len(executor.tasks)} parallel tasks with DAG dependencies...")
+            parallel_results = executor.execute()
+            
+            # Map AgentType to document type name for results
+            # This mapping ensures consistency with the original implementation
+            agent_type_to_doc_type = {
+                AgentType.API_DOCUMENTATION: "api_documentation",
+                AgentType.DATABASE_SCHEMA: "database_schema",
+                AgentType.SETUP_GUIDE: "setup_guide",
+                AgentType.DEVELOPER_DOCUMENTATION: "developer_documentation",
+                AgentType.TEST_DOCUMENTATION: "test_documentation",
+                AgentType.USER_DOCUMENTATION: "user_documentation",
+                AgentType.LEGAL_COMPLIANCE: "legal_compliance",
+                AgentType.SUPPORT_PLAYBOOK: "support_playbook",
+                AgentType.PM_DOCUMENTATION: "pm_documentation",
+                AgentType.STAKEHOLDER_COMMUNICATION: "stakeholder_documentation",
+                AgentType.BUSINESS_MODEL: "business_model",
+                AgentType.MARKETING_PLAN: "marketing_plan",
+            }
+            
+            def get_doc_type_from_agent_type(agent_type: AgentType) -> str:
+                """Convert AgentType to document type name for results"""
+                return agent_type_to_doc_type.get(agent_type, agent_type.value)
+            
             # Collect parallel task results
-            for task_id, file_path in parallel_results.items():
+            for task in phase2_tasks:
+                task_id = task.task_id
+                file_path = parallel_results.get(task_id)
+                agent_type = task.agent_type
+                doc_type = get_doc_type_from_agent_type(agent_type)
+                
                 if file_path and executor.tasks[task_id].status == TaskStatus.COMPLETE:
-                    doc_type, agent_type = task_id_to_doc_type.get(task_id, (task_id, None))
-                    if agent_type:
-                        results["files"][doc_type] = file_path
-                        results["status"][doc_type] = "complete"
-                        
-                        # Read content and add to final_docs
-                        try:
-                            content = self.file_manager.read_file(file_path)
-                            final_docs[agent_type] = content
-                            document_file_paths[agent_type] = file_path
-                            logger.info(f"  ✅ {doc_type}: {file_path}")
-                        except Exception as e:
-                            logger.warning(f"  ⚠️  Could not read {doc_type}: {e}")
+                    results["files"][doc_type] = file_path
+                    results["status"][doc_type] = "complete"
+                    
+                    # Read content and add to final_docs
+                    try:
+                        content = self.file_manager.read_file(file_path)
+                        final_docs[agent_type] = content
+                        document_file_paths[agent_type] = file_path
+                        logger.info(f"  ✅ {doc_type}: {file_path}")
+                    except Exception as e:
+                        logger.warning(f"  ⚠️  Could not read {doc_type}: {e}")
                 else:
                     error = executor.tasks[task_id].error if task_id in executor.tasks else "Unknown error"
                     logger.error(f"  ❌ Task {task_id} failed: {error}")
-                    doc_type, _ = task_id_to_doc_type.get(task_id, (task_id, None))
-                    if doc_type:
-                        results["status"][doc_type] = "failed"
+                    results["status"][doc_type] = "failed"
             
             logger.info("=" * 80)
             logger.info(f"✅ PHASE 2 COMPLETE: {len([r for r in parallel_results.values() if r])} documents generated in parallel")
