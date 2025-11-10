@@ -70,6 +70,7 @@ Thumbs.db
 !OLLAMA_TIMEOUT_FIX.md
 !OLLAMA_500_ERROR_FIX.md
 !AUTO_FIX_LOOP_GUIDE.md
+!LOCAL_MODEL_OPTIMIZATION.md
 
 
 # Documentation files (organized in docs/)
