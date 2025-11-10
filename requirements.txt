@@ -1,5 +1,11 @@
+# NOTE: This project uses uv and pyproject.toml for dependency management
+# For installation, use: uv sync --all-extras
+# Or run: ./scripts/setup.sh
+#
+# This requirements.txt is kept for reference/compatibility only.
+# The source of truth is pyproject.toml
+
 # Core dependencies
-pyautogen>=0.2.0
 google-generativeai>=0.3.0
 
 # Rate limiting and caching
@@ -11,8 +17,19 @@ textstat>=0.7.3  # Readability scoring
 
 # File operations
 python-dotenv>=1.0.0  # Environment variables
+markdown>=3.5.0
+weasyprint>=60.0
+python-docx>=1.1.0
+
+# Web interface
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+
+# Templates
+jinja2>=3.1.2
 
 # Optional but useful
+pyautogen>=0.2.0
 langchain>=0.1.0  # For context management (optional)
-jinja2>=3.1.2  # For templates
 

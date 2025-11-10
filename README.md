@@ -5,32 +5,31 @@ AI-powered documentation generation system that creates comprehensive documentat
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# Install dependencies (uses uv to sync from pyproject.toml)
 ./scripts/setup.sh
 
 # Set API key
 echo "GEMINI_API_KEY=your_key" > .env
 
-# Option 1: Activate virtual environment
-source .venv/bin/activate
-
-# Option 2: Use uv run (no activation needed)
-# uv run python -m src.web.app
-
-# Run tests
-pytest tests/unit
+# Run tests (uv run automatically uses the correct environment)
+uv run pytest tests/unit
 
 # Generate documentation (CLI)
-python3 -c "
+uv run python -c "
 from src.coordination.coordinator import WorkflowCoordinator
 coordinator = WorkflowCoordinator()
 coordinator.generate_all_docs('Build a task management app')
 "
 
 # Or use web interface
-python3 -m src.web.app
+uv run python -m src.web.app
 # Visit http://localhost:8000
 ```
+
+**Note:** This project uses `uv` to manage dependencies from `pyproject.toml`. 
+- Use `uv run <command>` to run commands in the project environment
+- No need to activate virtual environment manually
+- Dependencies are managed via `pyproject.toml`
 
 ## 📋 Features
 
@@ -76,19 +75,19 @@ docu-gen/
 
 ```bash
 # Run all tests
-pytest
+uv run pytest
 
 # Unit tests only (fast)
-pytest tests/unit -m unit
+uv run pytest tests/unit -m unit
 
 # With coverage
-pytest --cov=src --cov-report=html
+uv run pytest --cov=src --cov-report=html
 
 # Integration tests
-pytest tests/integration
+uv run pytest tests/integration
 
 # E2E tests (requires API key)
-pytest tests/e2e
+uv run pytest tests/e2e
 ```
 
 **Current Status:** 102 tests passing, 82% code coverage
@@ -97,6 +96,16 @@ pytest tests/e2e
 
 ### Generate All Documentation
 
+```bash
+# Using uv run
+uv run python -c "
+from src.coordination.coordinator import WorkflowCoordinator
+coordinator = WorkflowCoordinator()
+results = coordinator.generate_all_docs('Build a blog platform with user authentication')
+"
+```
+
+Or in a Python script:
 ```python
 from src.coordination.coordinator import WorkflowCoordinator
 
@@ -121,11 +130,7 @@ results = coordinator.generate_all_docs(
 ### Use Web Interface
 
 ```bash
-# Option 1: Activate virtual environment, then run
-source .venv/bin/activate
-python3 -m src.web.app
-
-# Option 2: Use uv run (no activation needed)
+# Use uv run (recommended - no activation needed)
 uv run python -m src.web.app
 
 # Visit http://localhost:8000
@@ -133,9 +138,9 @@ uv run python -m src.web.app
 ```
 
 **Note:** 
-- On macOS, use `python3` instead of `python`
-- Or use `uv run` which automatically uses the correct Python environment
-- Or activate the virtual environment: `source .venv/bin/activate`
+- This project uses `uv` to manage dependencies from `pyproject.toml`
+- `uv run` automatically uses the correct Python environment
+- No need to activate virtual environment manually
 
 ### Switch LLM Provider
 

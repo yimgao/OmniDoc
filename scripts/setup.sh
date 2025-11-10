@@ -1,6 +1,7 @@
 #!/bin/bash
 # Setup script for DOCU-GEN
 # Usage: ./scripts/setup.sh
+# Uses uv to manage dependencies from pyproject.toml
 
 set -e
 
@@ -17,42 +18,51 @@ fi
 python_version=$(python3 --version 2>&1 | awk '{print $2}')
 echo "📦 Python version: $python_version"
 
-# Create virtual environment
-echo ""
-echo "📦 Creating virtual environment..."
-uv venv
+# Create virtual environment (if it doesn't exist)
+if [ ! -d ".venv" ]; then
+    echo ""
+    echo "📦 Creating virtual environment..."
+    uv venv
+else
+    echo ""
+    echo "📦 Virtual environment already exists"
+fi
 
-# Install dependencies
+# Install dependencies from pyproject.toml
 echo ""
-echo "📦 Installing dependencies..."
-uv pip install --python .venv/bin/python \
-    google-generativeai>=0.3.0 \
-    ratelimit>=2.2.1 \
-    diskcache>=5.6.3 \
-    textstat>=0.7.3 \
-    python-dotenv>=1.0.0
-
-# Install dev dependencies
-echo ""
-echo "📦 Installing development dependencies..."
-uv pip install --python .venv/bin/python \
-    pytest>=7.0.0 \
-    pytest-cov>=4.1.0 \
-    pytest-mock>=3.12.0
+echo "📦 Installing dependencies from pyproject.toml..."
+echo "   (This installs all dependencies including dev dependencies)"
+uv sync --all-extras
 
 # Verify installation
 echo ""
 echo "✅ Verifying installation..."
-.venv/bin/python -c "
+uv run python -c "
 import sys
-packages = ['google.generativeai', 'ratelimit', 'diskcache', 'textstat', 'pytest']
+packages = [
+    'google.generativeai',
+    'ratelimit',
+    'diskcache',
+    'textstat',
+    'fastapi',
+    'uvicorn',
+    'jinja2',
+    'pydantic',
+    'markdown',
+    'pytest'
+]
+missing = []
 for pkg in packages:
     try:
-        __import__(pkg)
+        __import__(pkg.replace('-', '_'))
         print(f'  ✅ {pkg}')
     except ImportError:
         print(f'  ❌ {pkg}')
-        sys.exit(1)
+        missing.append(pkg)
+
+if missing:
+    print(f'\n⚠️  Missing packages: {missing}')
+    sys.exit(1)
 "
 
 echo ""
@@ -60,6 +70,7 @@ echo "✅ Setup complete!"
 echo ""
 echo "💡 Next steps:"
 echo "   1. Create .env file: echo 'GEMINI_API_KEY=your_key' > .env"
-echo "   2. Run tests: pytest tests/unit"
-echo "   3. See docs/README.md for more information"
+echo "   2. Run tests: uv run pytest tests/unit"
+echo "   3. Run web app: uv run python -m src.web.app"
+echo "   4. See README.md for more information"
 echo ""
