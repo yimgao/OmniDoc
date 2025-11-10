@@ -328,6 +328,27 @@ class BaseAgent(ABC):
         """
         pass
     
+    async def async_generate(self, *args, **kwargs) -> str:
+        """
+        Generate documentation (async version)
+        
+        Default implementation runs sync generate() in a thread pool.
+        Subclasses can override this for native async support.
+        
+        Args:
+            *args: Arguments passed to generate() method
+            **kwargs: Keyword arguments passed to generate() method
+            
+        Returns:
+            Generated documentation content
+        """
+        # Default: Run sync generate() in thread pool
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.generate(*args, **kwargs)
+        )
+    
     def get_stats(self) -> dict:
         """Get agent and rate limiting statistics"""
         return {
@@ -335,5 +356,16 @@ class BaseAgent(ABC):
             "provider": self.provider_name,
             "model_name": self.model_name,
             **self.rate_limiter.get_stats()
+        }
+    
+    async def async_get_stats(self) -> dict:
+        """Get agent and rate limiting statistics (async version)"""
+        async_rate_limiter = self._get_async_rate_limiter()
+        stats = await async_rate_limiter.get_stats()
+        return {
+            "agent_name": self.agent_name,
+            "provider": self.provider_name,
+            "model_name": self.model_name,
+            **stats
         }
 
