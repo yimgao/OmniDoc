@@ -1,11 +1,14 @@
 """
 Ollama LLM Provider
 Implements BaseLLMProvider for local Ollama API
+Supports both sync and async operations
 """
 import os
 from typing import Optional
 import requests
 from requests.exceptions import ConnectionError, RequestException, Timeout
+import aiohttp
+import asyncio
 from src.llm.base_provider import BaseLLMProvider
 from src.utils.logger import get_logger
 
@@ -52,6 +55,9 @@ class OllamaProvider(BaseLLMProvider):
         # For very long documents, increase this value
         self.request_timeout = int(os.getenv("OLLAMA_TIMEOUT", "600"))
         
+        # Async HTTP session (lazy initialization)
+        self._async_session: Optional[aiohttp.ClientSession] = None
+        
         # Test connection to Ollama server
         try:
             self._test_connection()
@@ -60,6 +66,19 @@ class OllamaProvider(BaseLLMProvider):
                 f"Could not connect to Ollama server at {self.base_url}. "
                 "Make sure Ollama is running. You can start it with: ollama serve"
             )
+    
+    async def _get_async_session(self) -> aiohttp.ClientSession:
+        """Get or create async HTTP session"""
+        if self._async_session is None or self._async_session.closed:
+            timeout = aiohttp.ClientTimeout(total=self.request_timeout)
+            self._async_session = aiohttp.ClientSession(timeout=timeout)
+        return self._async_session
+    
+    async def _close_async_session(self):
+        """Close async HTTP session"""
+        if self._async_session and not self._async_session.closed:
+            await self._async_session.close()
+            self._async_session = None
     
     def _test_connection(self):
         """Test connection to Ollama server"""
@@ -345,4 +364,173 @@ class OllamaProvider(BaseLLMProvider):
     def get_default_model(self) -> str:
         """Get default Ollama model"""
         return self.default_model_name
+    
+    async def async_generate(
+        self,
+        prompt: str,
+        model: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs
+    ) -> str:
+        """
+        Generate text using Ollama API (async version)
+        
+        Args:
+            prompt: Input prompt
+            model: Model name (uses default if None)
+            temperature: Sampling temperature (0.0-1.0)
+            max_tokens: Maximum tokens to generate (defaults to 8192 if not provided)
+            **kwargs: Additional Ollama parameters
+        
+        Returns:
+            Generated text
+        """
+        import time as time_module
+        
+        model_name = model or self.default_model_name
+        
+        # Prepare request payload (same as sync version)
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+            }
+        }
+        
+        # Set default max_tokens if not provided
+        if max_tokens is None:
+            default_max_tokens = os.getenv("OLLAMA_MAX_TOKENS")
+            if default_max_tokens:
+                max_tokens = int(default_max_tokens)
+            else:
+                max_tokens = 8192
+        
+        payload["options"]["num_predict"] = max_tokens
+        
+        # Calculate dynamic timeout
+        tokens_per_second = 10
+        estimated_generation_time = int(max_tokens / tokens_per_second) + 60
+        request_timeout = min(
+            max(self.request_timeout, estimated_generation_time),
+            1800
+        )
+        
+        # Add additional options from kwargs
+        if "top_p" in kwargs:
+            payload["options"]["top_p"] = kwargs.pop("top_p")
+        if "top_k" in kwargs:
+            payload["options"]["top_k"] = kwargs.pop("top_k")
+        if kwargs:
+            payload["options"].update(kwargs)
+        
+        # Retry configuration
+        max_retries = 2
+        retry_delay = 2.0
+        
+        session = await self._get_async_session()
+        
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(
+                    f"Calling Ollama API (async) (model: {model_name}, max_tokens: {max_tokens}, "
+                    f"timeout: {request_timeout}s, attempt: {attempt + 1}/{max_retries + 1})"
+                )
+                
+                async with session.post(
+                    f"{self.base_url}/api/chat",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=request_timeout)
+                ) as response:
+                    # Check for HTTP errors
+                    if response.status >= 400:
+                        error_text = await response.text()
+                        error_details = None
+                        try:
+                            error_response = await response.json()
+                            if "error" in error_response:
+                                error_details = error_response["error"]
+                            elif "message" in error_response:
+                                error_details = error_response["message"]
+                        except:
+                            error_details = error_text[:200] if error_text else None
+                        
+                        # Handle 500/503 errors with retry
+                        if response.status in [500, 503] and attempt < max_retries:
+                            error_msg = (
+                                f"Ollama API server error ({response.status}): {error_details or 'Internal server error'}. "
+                                f"Retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries + 1})..."
+                            )
+                            logger.warning(error_msg)
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 1.5
+                            continue
+                        
+                        # For other errors, raise immediately
+                        error_msg = (
+                            f"Ollama API error ({response.status}): {error_details or response.reason}. "
+                            f"Model: {model_name}, URL: {self.base_url}/api/chat"
+                        )
+                        
+                        if response.status == 404:
+                            error_msg += (
+                                f"\nModel '{model_name}' not found. "
+                                f"Try: ollama pull {model_name}"
+                            )
+                        elif response.status == 500:
+                            error_msg += (
+                                f"\nOllama server internal error. "
+                                f"Try: ollama run {model_name} (to test model)"
+                            )
+                        elif response.status == 503:
+                            error_msg += (
+                                f"\nOllama server temporarily unavailable. "
+                                f"Wait a few seconds and try again."
+                            )
+                        
+                        logger.error(error_msg)
+                        raise RuntimeError(error_msg)
+                    
+                    # Success - parse response
+                    result = await response.json()
+                    
+                    # Extract message content from response
+                    if "message" in result and "content" in result["message"]:
+                        content = result["message"]["content"]
+                        logger.debug(f"Ollama API response received (async) ({len(content)} characters)")
+                        return content
+                    elif "response" in result:
+                        content = result["response"]
+                        logger.debug(f"Ollama API response received (async) ({len(content)} characters)")
+                        return content
+                    else:
+                        raise RuntimeError(f"Unexpected Ollama API response format: {result}")
+                        
+            except asyncio.TimeoutError as e:
+                error_msg = (
+                    f"Ollama API request timed out after {request_timeout} seconds. "
+                    f"Consider: 1) Increasing OLLAMA_TIMEOUT, 2) Using a faster model, "
+                    f"3) Reducing max_tokens"
+                )
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
+            except aiohttp.ClientError as e:
+                if attempt < max_retries:
+                    logger.warning(
+                        f"Ollama API request error: {str(e)}. "
+                        f"Retrying in {retry_delay}s (attempt {attempt + 1}/{max_retries + 1})..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 1.5
+                    continue
+                raise RuntimeError(f"Ollama API error: {str(e)}") from e
+            except Exception as e:
+                raise RuntimeError(f"Unexpected error calling Ollama API: {str(e)}") from e
+        
+        # Should not reach here
+        raise RuntimeError(f"Ollama API call failed after {max_retries + 1} attempts")
 
