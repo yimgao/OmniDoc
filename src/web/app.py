@@ -26,8 +26,6 @@ logger = get_logger(__name__)
 # Global coordinator and context manager
 coordinator: Optional[WorkflowCoordinator] = None
 context_manager: Optional[ContextManager] = None
-# Note: project_status is now stored in database via ContextManager
-# Removed in-memory dictionary for stateless web app support
 
 # WebSocket connection manager for real-time progress updates
 class WebSocketManager:
