@@ -5,6 +5,26 @@ All agent prompts centralized here for easy editing
 from typing import Optional
 from src.utils.document_summarizer import summarize_document
 
+# Readability Guidelines - Applied to all prompts
+READABILITY_GUIDELINES = """
+Writing Requirements for Readability:
+- Language: Use clear, concise language. Avoid complex, long sentences. Aim for 15-20 words per sentence.
+- Lists: Use bullet points (•) and numbered lists (1., 2., 3.) to organize information whenever possible.
+- Paragraphs: Keep paragraphs short (3-5 sentences). Use white space for clarity.
+- Readability: Target Flesch Reading Ease score of 60 or higher (aim for "Standard" or "Fairly Easy" readability).
+- Clarity: Use simple, direct language. Avoid jargon when possible. Explain technical terms when necessary.
+- Structure: Use headings and subheadings to break up content. Make the document scannable.
+- Examples: Include examples and use cases to illustrate concepts. Show, don't just tell.
+- Active Voice: Prefer active voice over passive voice for clarity.
+- Short Sentences: Break up long sentences into shorter, more digestible ones.
+- Visual Breaks: Use lists, tables, and code blocks to break up text and improve readability.
+"""
+
+
+def apply_readability_guidelines(prompt_text: str) -> str:
+    """Replace {READABILITY_GUIDELINES} placeholder with actual guidelines"""
+    return prompt_text.replace("{READABILITY_GUIDELINES}", READABILITY_GUIDELINES)
+
 # Requirements Analyst Prompt
 REQUIREMENTS_ANALYST_PROMPT = """You are a Requirements Analyst specializing in extracting structured requirements from user ideas.
 
@@ -24,6 +44,8 @@ Format requirements:
 - Be thorough, clear, and professional
 - Each section should have substantial content (at least 3-5 points)
 - Use proper Markdown formatting
+
+{READABILITY_GUIDELINES}
 
 Now, analyze the following user idea:"""
 
@@ -74,6 +96,8 @@ Format requirements:
 - Be realistic and professional
 - Include specific estimates (durations in weeks/months, team sizes, budget ranges)
 - DO NOT just list requirements - create project plans with schedules and resource allocations
+{READABILITY_GUIDELINES}
+
 
 CRITICAL: Create project management documents that can actually be used to manage the project. Include specific timelines, team structures, budget breakdowns, and risk mitigation plans based on the project scope.
 
@@ -171,6 +195,8 @@ Format requirements:
 - Be SPECIFIC and technical - include actual technology names, versions, configurations
 - Include concrete examples - database schemas, API endpoint designs, code snippets
 - DO NOT write generic documentation - write specific technical specifications
+{READABILITY_GUIDELINES}
+
 
 CRITICAL: The technical specification must contain actionable, implementable technical designs. A developer should be able to use this document to understand the system architecture. 
 - Include database design OVERVIEW (table names, purposes, relationships, indexing strategy)
@@ -266,6 +292,8 @@ Format requirements:
 - Create AT LEAST 8-12 specific endpoints based on the core features
 - Each endpoint must be fully documented with examples
 - DO NOT write generic documentation - write specific API endpoint documentation
+{READABILITY_GUIDELINES}
+
 
 CRITICAL: Review the technical specifications carefully. Extract the API design details, database schema, and system architecture. Then design concrete REST API endpoints that would actually implement the features described. Write documentation as if these APIs already exist and you're documenting them for developers to use.
 
@@ -337,6 +365,8 @@ Format requirements:
 - Be practical and actionable
 - Include step-by-step instructions
 - Be developer-friendly and easy to follow
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the developer documentation:"""
 
@@ -401,6 +431,8 @@ Format requirements:
 - Be concise and executive-friendly
 - Focus on business value and outcomes
 - Include visual-friendly descriptions (no code)
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the stakeholder communication document:"""
 
@@ -462,6 +494,8 @@ Format requirements:
 - Provide actionable feedback
 - Use examples where helpful
 - Prioritize suggestions
+{READABILITY_GUIDELINES}
+
 
 Now, review the following documentation and generate the quality review report:"""
 
@@ -544,6 +578,8 @@ Format requirements:
 - Be concise and focused on user needs
 - Avoid technical jargon
 - DO NOT repeat requirements - write user guides showing HOW to use features
+{READABILITY_GUIDELINES}
+
 
 CRITICAL: Write from the USER's perspective. Show them how to accomplish tasks, not what the system does technically. For example, instead of "The system supports log ingestion", write "To upload logs, click the 'Upload Logs' button and select your log file."
 
@@ -615,13 +651,16 @@ Format requirements:
 - Be specific and actionable
 - Include test case IDs and descriptions
 - Document expected results clearly
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the test documentation:"""
 
 # Prompt template helpers
 def get_requirements_prompt(user_idea: str) -> str:
     """Get full requirements prompt with user idea"""
-    return f"{REQUIREMENTS_ANALYST_PROMPT}\n\nUser Idea: {user_idea}\n\nGenerate the complete requirements document:"
+    prompt = apply_readability_guidelines(REQUIREMENTS_ANALYST_PROMPT)
+    return f"{prompt}\n\nUser Idea: {user_idea}\n\nGenerate the complete requirements document:"
 
 
 def get_pm_prompt(requirements_summary: dict, project_charter_summary: Optional[str] = None) -> str:
@@ -656,7 +695,8 @@ Reference Information (for context only - DO NOT repeat):
 Project Overview: {requirements_summary.get('project_overview', 'N/A')}
 """
     
-    return f"""{PM_DOCUMENTATION_PROMPT}
+    prompt = apply_readability_guidelines(PM_DOCUMENTATION_PROMPT)
+    return f"""{prompt}
 
 {context_text}
 
@@ -719,7 +759,8 @@ technical architecture decisions. Align technical approach with project constrai
     if not user_stories_summary and not pm_summary:
         raise ValueError("Level 3 (Technical Documentation) REQUIRES at least one Level 2 output (User Stories or PM Plan). Cannot proceed without it.")
     
-    final_prompt = f"""{TECHNICAL_DOCUMENTATION_PROMPT}
+    tech_prompt = apply_readability_guidelines(TECHNICAL_DOCUMENTATION_PROMPT)
+    final_prompt = f"""{tech_prompt}
 
 === LEVEL 3: Technical Documentation ===
 You are generating Level 3 documentation, which MUST be based on Level 2 outputs (User Stories & PM Plan).
@@ -855,7 +896,8 @@ Each API endpoint must:
 - Implement the error handling patterns from Technical Documentation
 """
     
-    return f"""{API_DOCUMENTATION_PROMPT}
+    api_prompt = apply_readability_guidelines(API_DOCUMENTATION_PROMPT)
+    return f"""{api_prompt}
 
 {context}
 
@@ -917,7 +959,8 @@ Use the API documentation above to provide:
 CRITICAL: DO NOT repeat requirements or Level 1/2 content. Focus on HOW developers use the Level 3 specifications.
 """
     
-    return f"""{DEVELOPER_DOCUMENTATION_PROMPT}
+    developer_prompt = apply_readability_guidelines(DEVELOPER_DOCUMENTATION_PROMPT)
+    return f"""{developer_prompt}
 
 {context}
 
@@ -941,7 +984,8 @@ Technical Requirements (simplified):
     
     pm_text = f"\n\nProject Management Details:\n{pm_summary}" if pm_summary else ""
     
-    return f"{STAKEHOLDER_COMMUNICATION_PROMPT}\n\n{req_text}{pm_text}\n\nGenerate the complete stakeholder communication document:"
+    stakeholder_prompt = apply_readability_guidelines(STAKEHOLDER_COMMUNICATION_PROMPT)
+    return f"{stakeholder_prompt}\n\n{req_text}{pm_text}\n\nGenerate the complete stakeholder communication document:"
 
 
 def get_quality_reviewer_prompt(all_documentation: dict) -> str:
@@ -962,7 +1006,8 @@ def get_quality_reviewer_prompt(all_documentation: dict) -> str:
     
     docs_text = "\n\n".join(docs_text_parts)
     
-    return f"{QUALITY_REVIEWER_PROMPT}\n\n{docs_text}\n\nGenerate the complete quality review report:"
+    prompt = apply_readability_guidelines(QUALITY_REVIEWER_PROMPT)
+    return f"{prompt}\n\n{docs_text}\n\nGenerate the complete quality review report:"
 
 
 def get_user_prompt(requirements_summary: dict) -> str:
@@ -977,7 +1022,8 @@ User Personas:
 {chr(10).join('- ' + str(p) for p in requirements_summary.get('user_personas', []))}
 """
     
-    return f"{USER_DOCUMENTATION_PROMPT}\n\n{req_text}\n\nGenerate the complete user documentation:"
+    prompt = apply_readability_guidelines(USER_DOCUMENTATION_PROMPT)
+    return f"{prompt}\n\n{req_text}\n\nGenerate the complete user documentation:"
 
 
 def get_test_prompt(requirements_summary: dict, technical_summary: Optional[str] = None) -> str:
@@ -1012,7 +1058,8 @@ Design SPECIFIC test cases based on Technical Documentation above:
 - DO NOT create generic tests - base ALL tests on the specific technical design
 """
     
-    return f"""{TEST_DOCUMENTATION_PROMPT}
+    test_prompt = apply_readability_guidelines(TEST_DOCUMENTATION_PROMPT)
+    return f"""{test_prompt}
 
 {context}
 
@@ -1106,13 +1153,15 @@ The document should be optimized for Claude CLI to:
 - Generate code based on the specifications
 - Understand the codebase architecture
 - Provide accurate coding assistance
+{READABILITY_GUIDELINES}
+
 
 Now, consolidate all the provided documentation into a comprehensive claude.md file:"""
 
 
 def get_claude_cli_prompt() -> str:
     """Get Claude CLI documentation prompt"""
-    return CLAUDE_CLI_DOCUMENTATION_PROMPT
+    return apply_readability_guidelines(CLAUDE_CLI_DOCUMENTATION_PROMPT)
 
 
 # Project Charter (Business Case) Agent Prompt - Level 1: Strategic
@@ -1198,6 +1247,8 @@ Format requirements:
 - Write for executive and stakeholder audience
 - Include specific numbers and metrics where possible
 - Professional and persuasive tone
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project requirements and generate the Project Charter:"""
 
@@ -1219,7 +1270,8 @@ Core Features: {', '.join(core_features) if core_features else 'To be determined
 Business Objectives: {', '.join(business_objectives) if business_objectives else 'To be determined'}
 """
     
-    return PROJECT_CHARTER_PROMPT + "\n\n" + context
+    charter_prompt = apply_readability_guidelines(PROJECT_CHARTER_PROMPT)
+    return charter_prompt + "\n\n" + context
 
 
 # User Stories & Epics Agent Prompt - Level 2: Product
@@ -1286,6 +1338,8 @@ IMPORTANT OUTPUT FORMAT:
 - DO NOT repeat the requirements document or Project Charter verbatim
 - Generate ONLY the User Stories content based on the Project Charter
 - Start directly with your document structure (e.g., "# User Stories & Epics" or "## Epics Overview")
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the User Stories document:"""
 
@@ -1324,7 +1378,8 @@ Reference Information:
 Project Overview: {requirements_summary.get('project_overview', 'N/A')}
 Core Features: {', '.join(requirements_summary.get('core_features', [])) if requirements_summary.get('core_features') else 'N/A'}
 """
-        final_prompt = f"""{USER_STORIES_PROMPT}
+        user_stories_prompt_base = apply_readability_guidelines(USER_STORIES_PROMPT)
+        final_prompt = f"""{user_stories_prompt_base}
 
 {context}
 
@@ -1340,7 +1395,8 @@ Generate the complete User Stories and Epics document based on the requirements:
         return final_prompt
     
     # Team mode: Use Project Charter
-    final_prompt = f"""{USER_STORIES_PROMPT}
+    user_stories_prompt_base = apply_readability_guidelines(USER_STORIES_PROMPT)
+    final_prompt = f"""{user_stories_prompt_base}
 
 {context}
 
@@ -1451,6 +1507,8 @@ Format requirements:
 - Include ASCII art or Markdown tables for ERD
 - Be specific with data types and constraints
 - Include practical examples
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project requirements and technical specifications to generate the Database Schema:"""
 
@@ -1485,7 +1543,8 @@ CRITICAL INSTRUCTIONS:
 8. DO NOT repeat requirements - implement the database design from Technical Documentation
 """
     
-    final_prompt = f"""{DATABASE_SCHEMA_PROMPT}
+    db_schema_prompt = apply_readability_guidelines(DATABASE_SCHEMA_PROMPT)
+    final_prompt = f"""{db_schema_prompt}
 
 {context}
 
@@ -1592,6 +1651,8 @@ Format requirements:
 - Be specific and avoid assumptions
 - Include screenshots/descriptions where helpful
 - Test all commands before including them
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project requirements and technical specifications to generate the Setup Guide:"""
 
@@ -1662,7 +1723,8 @@ API Documentation (Level 3):
 Use API documentation to provide examples of testing API endpoints during setup verification.
 """
     
-    final_prompt = f"""{SETUP_GUIDE_PROMPT}
+    setup_guide_prompt = apply_readability_guidelines(SETUP_GUIDE_PROMPT)
+    final_prompt = f"""{setup_guide_prompt}
 
 {context}
 
@@ -1732,6 +1794,8 @@ Format requirements:
 - Include specific timelines, budgets, and metrics
 - Be strategic and actionable
 - Base recommendations on the business model and project charter
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the marketing plan:"""
 
@@ -1786,6 +1850,8 @@ Format requirements:
 - Use tables for pricing tiers and cost breakdowns
 - Include specific numbers and projections where possible
 - Be realistic and data-driven
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the business model:"""
 
@@ -1836,6 +1902,8 @@ Format requirements:
 - Include specific procedures and scripts
 - Be practical and actionable
 - Base content on user documentation and requirements
+{READABILITY_GUIDELINES}
+
 
 Now, analyze the following project information and generate the support playbook:"""
 
@@ -1892,6 +1960,8 @@ Format requirements:
 - Include legal disclaimers where appropriate
 - Be thorough and accurate
 - Note: This is a draft - should be reviewed by legal counsel
+{READABILITY_GUIDELINES}
+
 
 IMPORTANT: This document provides templates and guidance. All legal documents should be reviewed by qualified legal counsel before use.
 
@@ -1940,7 +2010,8 @@ Business Model:
 {business_processed}
 """
     
-    return f"""{MARKETING_PLAN_PROMPT}
+    marketing_prompt = apply_readability_guidelines(MARKETING_PLAN_PROMPT)
+    return f"""{marketing_prompt}
 
 {context_text}
 
@@ -1974,7 +2045,8 @@ Project Charter (Business Context):
 {charter_processed}
 """
     
-    return f"""{BUSINESS_MODEL_PROMPT}
+    business_model_prompt = apply_readability_guidelines(BUSINESS_MODEL_PROMPT)
+    return f"""{business_model_prompt}
 
 {context_text}
 
@@ -2007,7 +2079,8 @@ User Documentation (Reference for Support):
 {user_doc_processed}
 """
     
-    return f"""{SUPPORT_PLAYBOOK_PROMPT}
+    support_playbook_prompt = apply_readability_guidelines(SUPPORT_PLAYBOOK_PROMPT)
+    return f"""{support_playbook_prompt}
 
 {context_text}
 
@@ -2040,7 +2113,8 @@ Technical Documentation (Data Handling Reference):
 {tech_processed}
 """
     
-    return f"""{LEGAL_COMPLIANCE_PROMPT}
+    legal_compliance_prompt = apply_readability_guidelines(LEGAL_COMPLIANCE_PROMPT)
+    return f"""{legal_compliance_prompt}
 
 {context_text}
 
