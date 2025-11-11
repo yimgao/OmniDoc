@@ -1,6 +1,6 @@
 # OmniDoc (DOCU-GEN)
 
-AI-powered documentation generation system that creates comprehensive documentation from simple user ideas using multi-agent collaboration. Supports multiple LLM providers including Gemini, OpenAI, and **Ollama (local LLM)**.
+AI-powered documentation generation system that creates comprehensive documentation from simple user ideas using multi-agent collaboration. Uses **Google Gemini** for all agents to ensure high-quality documentation generation.
 
 ## 🚀 Quick Start
 
@@ -18,7 +18,7 @@ cd OmniDoc
 The setup script will:
 - Create a virtual environment (`.venv`)
 - Install all dependencies from `pyproject.toml`
-- Verify installation and Ollama provider setup
+- Verify installation
 - Support both `uv` (recommended) and `pip` fallback
 
 ### 2. Configure Environment
@@ -27,38 +27,23 @@ The setup script will:
 # Copy the example environment file
 cp .env.example .env
 
-# Edit .env and configure your LLM provider
-# Options: Ollama (local, no API key), Gemini, or OpenAI
+# Edit .env and configure your Gemini API key
 ```
 
-**For Ollama (Recommended for Development):**
+**Required Configuration:**
 ```bash
 # In .env file
-LLM_PROVIDER=ollama
-OLLAMA_DEFAULT_MODEL=dolphin3
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MAX_TOKENS=8192
-
-# Make sure Ollama is running
-ollama serve
-
-# Pull the model
-ollama pull dolphin3
-```
-
-**For Gemini:**
-```bash
-# In .env file
-LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Use a different Gemini model (default: gemini-2.0-flash)
+GEMINI_DEFAULT_MODEL=gemini-2.0-flash
+# Options: gemini-2.0-flash (recommended), gemini-2.5-flash, gemini-2.5-pro
 ```
 
-**For OpenAI:**
-```bash
-# In .env file
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key_here
-```
+**Get Your Gemini API Key:**
+1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Create a new API key
+3. Copy the key to your `.env` file
 
 ### 3. Generate Documentation
 
@@ -79,43 +64,37 @@ uv run python -m src.web.app
 
 ### Core Capabilities
 
-- **20+ Documentation Agents**: Requirements, PM, Technical, API, Developer, Stakeholder, User, Test, Quality Review, Format Converter, Business Model, Marketing Plan, Legal Compliance, Database Schema, Setup Guide, User Stories, Support Playbook, and more
+- **21 Documentation Agents**: Requirements, PM, Technical, API, Developer, Stakeholder, User, Test, Quality Review, Format Converter, Business Model, Marketing Plan, Legal Compliance, Database Schema, Setup Guide, User Stories, Support Playbook, and more
 - **Hybrid Workflow**: 
   - **Phase 1 (Quality Gates)**: Foundational documents use iterative quality loops (generate → check → improve) to ensure maximum quality
-  - **Phase 2 (Parallel Execution)**: Secondary documents generated in parallel for maximum speed (3x faster)
+  - **Phase 2 (Parallel Execution)**: Secondary documents generated in parallel using DAG-based async execution (3x faster)
   - **Phase 3 (Final Packaging)**: Cross-referencing, quality review, and format conversion
-- **Multi-LLM Support**: 
-  - **Ollama** (local, no API key required) - Recommended for development
-  - **Google Gemini** (cloud-based) - Recommended for production
-  - **OpenAI GPT** (cloud-based)
-  - Extensible architecture for other providers
-- **Hybrid Mode**: Automatically uses Gemini for critical/complex agents and Ollama for others (80% cost savings)
+  - **Phase 4 (Code Analysis)**: Optional codebase analysis and documentation updates
+- **LLM Provider**: 
+  - **Google Gemini** (all agents) - High-quality cloud-based LLM
+  - **Default Model**: `gemini-2.0-flash` (balanced quality and speed)
+  - **Configurable**: Support for `gemini-2.5-flash` and `gemini-2.5-pro` via environment variable
 - **Format Conversion**: Outputs Markdown, HTML, PDF, DOCX
 - **Quality Assurance**: Automated quality checks with document-type-specific criteria
-- **Parallel Execution**: 3x speedup for independent agents
-- **Web Interface**: FastAPI web app with real-time progress tracking
+- **Parallel Execution**: Async parallel execution with DAG-based dependencies (3x speedup)
+- **Web Interface**: FastAPI web app with real-time progress tracking via WebSocket
 - **Error Handling**: Retry logic with exponential backoff
 - **Document Templates**: Jinja2-based customizable templates
 - **Cross-Referencing**: Automatic linking between documents
 - **Intelligent Parsing**: Structured data extraction from requirements
-- **Context Management**: SQLite-based shared context across agents
+- **Context Management**: SQLite-based shared context across agents (stateless web app)
 - **Rate Limiting**: Built-in rate limiting and caching
+- **WebSocket Support**: Real-time progress updates (falls back to polling if WebSocket fails)
 
 ### LLM Provider Features
 
-- **Ollama Provider**: 
-  - Local LLM support (no API costs)
-  - Configurable token limits (default: 8192 tokens)
-  - Supports all Ollama models (dolphin3, mixtral, llama2, mistral, etc.)
-  - Automatic connection handling with retry logic
-  - Dynamic timeout calculation based on output length
-- **Gemini Provider**:
-  - Rate limit handling with automatic retry
-  - Support for multiple Gemini models
-  - High-quality output for complex tasks
-- **OpenAI Provider**:
-  - Full GPT-4 and GPT-3.5 support
-  - Configurable models and parameters
+- **Gemini Provider** (All Agents):
+  - **Default Model**: `gemini-2.0-flash` (recommended balance of quality and speed)
+  - **Alternative Models**: `gemini-2.5-flash` (higher quality), `gemini-2.5-pro` (highest quality)
+  - **Rate Limit Handling**: Automatic retry with exponential backoff
+  - **Token Limits**: 1M TPM (tokens per minute), 15 RPM (requests per minute), 200 RPD (requests per day) on free tier
+  - **High-Quality Output**: Optimized for complex documentation tasks
+  - **Configurable**: Set `GEMINI_DEFAULT_MODEL` environment variable to use a different model
 
 ## 🏗️ Project Structure
 
@@ -154,24 +133,24 @@ OmniDoc/
 
 ### Environment Variables
 
-**Key Configuration Options:**
+**Required Configuration:**
 
-**LLM Provider:**
-- `LLM_PROVIDER`: Choose provider (`ollama`, `gemini`, `openai`)
-- `GEMINI_API_KEY`: Gemini API key (if using Gemini)
-- `OPENAI_API_KEY`: OpenAI API key (if using OpenAI)
+**Gemini API Key:**
+- `GEMINI_API_KEY`: **Required** - Your Google Gemini API key
+  - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
 
-**Ollama Configuration:**
-- `OLLAMA_DEFAULT_MODEL`: Model name for Ollama (default: `dolphin3`)
-- `OLLAMA_BASE_URL`: Ollama server URL (default: `http://localhost:11434`)
-- `OLLAMA_MAX_TOKENS`: Max output tokens for Ollama (default: `8192`)
-- `OLLAMA_TIMEOUT`: Request timeout in seconds (default: `600`)
+**Optional Configuration:**
+
+**Gemini Model:**
+- `GEMINI_DEFAULT_MODEL`: Gemini model to use (default: `gemini-2.0-flash`)
+  - Options: `gemini-2.0-flash` (recommended), `gemini-2.5-flash`, `gemini-2.5-pro`
+  - `gemini-2.0-flash`: Best balance (15 RPM, 1M TPM, 200 RPD)
+  - `gemini-2.5-flash`: Higher quality (10 RPM, 250K TPM, 250 RPD)
+  - `gemini-2.5-pro`: Highest quality (2 RPM, 125K TPM, 50 RPD)
 
 **Temperature Control:**
-- `TEMPERATURE`: Global temperature (default: `0.7`)
-- `OLLAMA_TEMPERATURE`: Ollama-specific temperature (default: `0.3`)
+- `TEMPERATURE`: Global temperature (default: `0.3`)
 - `GEMINI_TEMPERATURE`: Gemini-specific temperature (default: `0.7`)
-- `OPENAI_TEMPERATURE`: OpenAI-specific temperature (default: `0.7`)
 
 **Document Summarization:**
 - `MAX_SUMMARY_LENGTH`: Maximum summary length in characters (default: `3000`)
@@ -180,74 +159,43 @@ OmniDoc/
 - `ENVIRONMENT`: Environment mode (`dev`, `prod`, `test`)
 - `LOG_LEVEL`: Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)
 - `DOCS_DIR`: Output directory for generated docs (default: `docs/`)
-- `RATE_LIMIT_PER_MINUTE`: Rate limit for API calls (default: `60`)
+- `RATE_LIMIT_PER_MINUTE`: Rate limit for API calls (default: `50`)
 
-### Switching LLM Providers
+**Note**: All agents use Gemini (hardcoded). Environment variables for other providers are ignored.
 
-#### Method 1: Edit .env File (Recommended)
+### Model Configuration
+
+**All agents use Gemini** (hardcoded for consistency and quality). You can configure which Gemini model to use:
+
+#### Method 1: Environment Variable (Recommended)
 
 ```bash
-# Edit .env file
-nano .env
-
-# For Ollama (local)
-LLM_PROVIDER=ollama
-OLLAMA_DEFAULT_MODEL=dolphin3
-
-# For Gemini (cloud)
-LLM_PROVIDER=gemini
+# In .env file
 GEMINI_API_KEY=your_gemini_api_key_here
-
-# For OpenAI (cloud)
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_DEFAULT_MODEL=gemini-2.0-flash  # Optional: default is gemini-2.0-flash
 ```
 
-#### Method 2: In Code
+#### Method 2: Code Override
 
 ```python
-# Use Ollama (local)
 from src.coordination.coordinator import WorkflowCoordinator
 
-coordinator = WorkflowCoordinator(provider_name="ollama")
+# All agents will use Gemini (default model: gemini-2.0-flash)
+coordinator = WorkflowCoordinator()
 
-# Use Gemini (cloud)
-coordinator = WorkflowCoordinator(provider_name="gemini")
-
-# Use OpenAI (cloud)
-coordinator = WorkflowCoordinator(provider_name="openai")
+# To use a different model, set GEMINI_DEFAULT_MODEL environment variable
+# or modify the default in src/llm/gemini_provider.py
 ```
 
-#### Hybrid Mode (Mixed Providers) - Recommended for Production
+#### Available Models
 
-The system supports **Hybrid Mode** which automatically uses Gemini for critical/complex agents and Ollama for others. This balances quality with cost.
+| Model | Quality | RPM | TPM | RPD | Best For |
+|-------|---------|-----|-----|-----|----------|
+| `gemini-2.0-flash` | ⭐⭐⭐⭐ | 15 | 1M | 200 | **Recommended** - Balanced quality and speed |
+| `gemini-2.5-flash` | ⭐⭐⭐⭐⭐ | 10 | 250K | 250 | Higher quality, slower |
+| `gemini-2.5-pro` | ⭐⭐⭐⭐⭐ | 2 | 125K | 50 | Highest quality, very slow |
 
-**Automatic Hybrid Mode:**
-- When `LLM_PROVIDER=ollama` and `GEMINI_API_KEY` is set
-- Key agents (technical, API, database, requirements) use Gemini
-- Other agents use Ollama (free)
-- **Cost savings: ~80% while maintaining quality for critical docs**
-
-**Example:**
-```python
-# Hybrid mode is automatic when using Ollama with Gemini API key
-coordinator = WorkflowCoordinator(
-    provider_name="ollama",  # Default: Ollama
-    # Key agents automatically use Gemini if GEMINI_API_KEY is set
-)
-
-# Or explicitly configure:
-coordinator = WorkflowCoordinator(
-    provider_name="ollama",
-    provider_config={
-        "technical_agent": "gemini",      # Complex docs use Gemini
-        "api_agent": "gemini",            # API docs use Gemini
-        "database_schema_agent": "gemini", # Database design uses Gemini
-        "requirements_analyst": "gemini",  # Requirements use Gemini
-        # Others use Ollama (default)
-    }
-)
-```
+**Recommendation**: Use `gemini-2.0-flash` for best balance of quality and speed.
 
 ## 🎯 Usage Examples
 
@@ -371,91 +319,70 @@ uv run mypy src
 
 ## 🔍 Troubleshooting
 
-### Ollama Connection Issues
+### Gemini API Key Issues
 
 ```bash
-# Check if Ollama is running
-ollama serve
+# Verify your API key is set
+echo $GEMINI_API_KEY
 
-# Verify model is available
-ollama list
+# Or check .env file
+cat .env | grep GEMINI_API_KEY
 
-# Pull the model if needed
-ollama pull dolphin3
-
-# For better quality, use a larger model
-ollama pull mixtral
-# Then update .env: OLLAMA_DEFAULT_MODEL=mixtral
+# Get a new API key from Google AI Studio
+# Visit: https://makersuite.google.com/app/apikey
 ```
 
-### Ollama Timeout Errors
+### Gemini Rate Limit Errors
 
-If you see timeout errors with Ollama:
+If you see rate limit errors:
 
-```bash
-# Increase timeout in .env
-OLLAMA_TIMEOUT=1200  # 20 minutes
+1. **Check your usage**: Visit [Google AI Studio](https://makersuite.google.com/app/apikey) to check your rate limit usage
+2. **Wait and retry**: The system automatically retries with exponential backoff
+3. **Use a different model**: Switch to `gemini-2.5-flash` (10 RPM) or `gemini-2.5-pro` (2 RPM) if you're hitting limits
+4. **Reduce rate limit**: Set `RATE_LIMIT_PER_MINUTE=30` in `.env` to stay well below limits
 
-# Or use a faster model
-OLLAMA_DEFAULT_MODEL=dolphin3  # Smaller, faster model
-```
+### Gemini API Errors
 
-### Ollama 500 Errors
+If you see API errors:
 
-If you see 500 Internal Server Error from Ollama:
-
-```bash
-# Check Ollama logs
-ollama serve
-
-# Verify model is properly loaded
-ollama list
-
-# Try restarting Ollama
-# On macOS/Linux: pkill ollama && ollama serve
-# On Windows: Stop Ollama service and restart
-
-# Use a smaller model if memory is limited
-ollama pull dolphin3
-```
-
-### Google GenerativeAI Import Error
-
-```bash
-# Fix the import error
-pip uninstall google -y
-pip install google-generativeai
-
-# Or reinstall all dependencies
-uv sync
-```
+1. **Check API key**: Verify your `GEMINI_API_KEY` is valid
+2. **Check model availability**: Ensure the model name is correct (e.g., `gemini-2.0-flash`)
+3. **Check rate limits**: Visit [Google AI Studio](https://makersuite.google.com/app/apikey) to check your quota
+4. **Review logs**: Check application logs for detailed error messages
 
 ### Low Quality Scores
 
 If generated documents have low quality scores:
 
-1. **Use a better model**: Switch to Gemini or upgrade Ollama model (e.g., `mixtral`)
-2. **Enable Hybrid Mode**: Use Gemini for critical agents, Ollama for others
-3. **Adjust temperature**: Lower temperature (0.3) for more consistent output
-4. **Check quality thresholds**: Quality gates in Phase 1 will automatically improve documents
+1. **Use a better model**: Switch to `gemini-2.5-flash` or `gemini-2.5-pro` via `GEMINI_DEFAULT_MODEL`
+2. **Adjust temperature**: Lower temperature (0.3) for more consistent output
+3. **Quality gates**: Phase 1 documents automatically improve if quality is below threshold
+4. **Check prompts**: Review system prompts in `src/prompts/system_prompts.py`
+
+### WebSocket Connection Issues
+
+If WebSocket fails to connect:
+
+1. **Check WebSocket support**: Ensure `websockets` package is installed (`uv sync`)
+2. **Fallback to polling**: The system automatically falls back to HTTP polling if WebSocket fails
+3. **Check browser console**: Look for WebSocket connection errors in browser console
+4. **Verify server**: Ensure the server is running and accessible
 
 ## 📦 Dependencies
 
 ### Core Dependencies
-- `google-generativeai>=0.3.0` - Gemini provider
-- `requests>=2.31.0` - HTTP client (for Ollama)
+- `google-generativeai>=0.3.0` - Gemini provider (required)
 - `fastapi>=0.100.0` - Web framework
 - `uvicorn>=0.23.0` - ASGI server
+- `websockets>=12.0` - WebSocket support for real-time updates
 - `python-dotenv>=1.0.0` - Environment variables
 - `jinja2>=3.1.2` - Template engine
 - `pydantic>=2.0.0` - Data validation
 - `markdown>=3.5.0` - Markdown processing
 - `weasyprint>=60.0` - PDF generation
 - `python-docx>=1.1.0` - DOCX generation
-
-### Optional Dependencies
-- `openai>=1.0.0` - OpenAI provider (install with `uv sync --extra openai`)
-- `anthropic>=0.18.0` - Anthropic provider (install with `uv sync --extra anthropic`)
+- `aiohttp>=3.9.0` - Async HTTP client
+- `requests>=2.31.0` - HTTP client
 
 See [pyproject.toml](pyproject.toml) for complete dependency list.
 
@@ -485,8 +412,54 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - No need to activate virtual environment manually
 - Dependencies are managed via `pyproject.toml`
 
+## 🎯 Key Features
+
+### All Agents Use Gemini
+- **Hardcoded**: All 21 agents use Gemini (cannot be changed via environment variables)
+- **Default Model**: `gemini-2.0-flash` (balanced quality and speed)
+- **Configurable**: Set `GEMINI_DEFAULT_MODEL` environment variable to use a different model
+- **Benefits**: Consistent quality, no local model dependencies, cloud-based scalability
+
+### Hybrid Workflow
+- **Phase 1**: Quality gates with iterative improvement for foundational documents
+- **Phase 2**: Parallel execution with DAG-based dependencies for maximum speed
+- **Phase 3**: Final packaging with cross-referencing and format conversion
+- **Phase 4**: Optional code analysis and documentation updates
+
+### Real-Time Progress Updates
+- **WebSocket**: Real-time progress updates via WebSocket
+- **Fallback**: Automatic fallback to HTTP polling if WebSocket fails
+- **Progress Tracking**: Phase-based progress tracking (Phase 1: 25%, Phase 2: 60%, Phase 3: 85%)
+
+### Quality Assurance
+- **Document-Type-Specific**: Quality checks tailored to each document type
+- **Automatic Improvement**: Low-quality documents are automatically improved
+- **Quality Thresholds**: Configurable quality thresholds for each document type
+- **Quality Reports**: Comprehensive quality reports for all documents
+
 ## 📚 Additional Resources
 
+- **Workflow Documentation**: See [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md) for detailed workflow documentation
 - **Configuration Guide**: See [src/config/README.md](src/config/README.md) for detailed configuration options
 - **Examples**: See [examples/](examples/) directory for usage examples
 - **Generated Docs**: See [docs/](docs/) directory for generated documentation index
+
+## 🔄 Workflow Overview
+
+DOCU-GEN uses a **Hybrid Workflow** that combines quality gates with parallel execution:
+
+1. **Phase 1 (Quality Gates)**: Foundational documents (Requirements, Project Charter, User Stories, Technical Documentation) are generated with iterative quality loops to ensure maximum quality
+2. **Phase 2 (Parallel Execution)**: Secondary documents are generated in parallel using DAG-based async execution for maximum speed
+3. **Phase 3 (Final Packaging)**: Cross-referencing, quality review, and format conversion
+4. **Phase 4 (Code Analysis)**: Optional codebase analysis and documentation updates
+
+See [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md) for detailed workflow documentation.
+
+## ⚙️ Architecture
+
+- **All Agents Use Gemini**: Hardcoded in Coordinator for consistency and quality
+- **Async Execution**: Phase 2 agents use native async support for better performance
+- **DAG-Based Dependencies**: Phase 2 tasks use directed acyclic graph for dependency management
+- **Quality Gates**: Phase 1 documents use iterative quality loops (generate → check → improve)
+- **Stateless Web App**: Uses SQLite database for project context and status
+- **WebSocket Support**: Real-time progress updates (falls back to polling if WebSocket fails)
