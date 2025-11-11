@@ -79,6 +79,37 @@ class MarketingPlanAgent(BaseAgent):
             logger.error(f"Error generating marketing plan: {e}")
             raise
     
+    async def async_generate(
+        self,
+        requirements_summary: dict,
+        project_charter_summary: Optional[str] = None,
+        business_model_summary: Optional[str] = None
+    ) -> str:
+        """
+        Generate marketing plan documentation (async)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            project_charter_summary: Optional Project Charter content
+            business_model_summary: Optional Business Model content
+        
+        Returns:
+            Generated marketing plan documentation (Markdown)
+        """
+        full_prompt = get_marketing_plan_prompt(
+            requirements_summary,
+            project_charter_summary,
+            business_model_summary
+        )
+        
+        try:
+            marketing_doc = await self._async_call_llm(full_prompt, temperature=0.7)
+            logger.debug(f"Marketing Plan document generated (async) (length: {len(marketing_doc)} characters)")
+            return marketing_doc
+        except Exception as e:
+            logger.error(f"Error generating marketing plan (async): {e}")
+            raise
+    
     def generate_and_save(
         self,
         requirements_summary: dict,
@@ -89,7 +120,7 @@ class MarketingPlanAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None
     ) -> str:
         """
-        Generate marketing plan and save to file
+        Generate marketing plan and save to file (sync version)
         
         Args:
             requirements_summary: Requirements summary
@@ -130,6 +161,65 @@ class MarketingPlanAgent(BaseAgent):
                 logger.debug("Marketing plan saved to context")
             except Exception as e:
                 logger.warning(f"Could not save marketing plan to context: {e}")
+        
+        return file_path
+    
+    async def async_generate_and_save(
+        self,
+        requirements_summary: dict,
+        project_charter_summary: Optional[str] = None,
+        business_model_summary: Optional[str] = None,
+        output_filename: str = "marketing_plan.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate marketing plan and save to file (async version)
+        
+        Args:
+            requirements_summary: Requirements summary
+            project_charter_summary: Optional project charter
+            business_model_summary: Optional business model
+            output_filename: Output filename
+            project_id: Project ID for context
+            context_manager: Context manager instance
+        
+        Returns:
+            Path to saved file
+        """
+        import asyncio
+        logger.info(f"Generating marketing plan (async) for project: {project_id}")
+        
+        # Generate documentation (async)
+        marketing_doc = await self.async_generate(
+            requirements_summary,
+            project_charter_summary,
+            business_model_summary
+        )
+        
+        # Save to file (file I/O in executor)
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(
+            None,
+            lambda: self.file_manager.write_file(output_filename, marketing_doc)
+        )
+        logger.info(f"Marketing plan saved (async) to: {file_path}")
+        
+        # Save to context (async)
+        if project_id and context_manager:
+            output = AgentOutput(
+                agent_type=AgentType.MARKETING_PLAN,
+                document_type="marketing_plan",
+                content=marketing_doc,
+                file_path=file_path,
+                status=DocumentStatus.COMPLETE,
+                generated_at=datetime.now()
+            )
+            await loop.run_in_executor(
+                None,
+                lambda: context_manager.save_agent_output(project_id, output)
+            )
+            logger.debug("Marketing plan saved to context (async)")
         
         return file_path
 

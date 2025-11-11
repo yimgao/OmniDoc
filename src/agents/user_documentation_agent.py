@@ -61,11 +61,27 @@ class UserDocumentationAgent(BaseAgent):
         # Get prompt from centralized prompts config
         full_prompt = get_user_prompt(requirements_summary)
         
-        
-        stats = self.get_stats()
-        
         try:
             user_doc = self._call_llm(full_prompt)
+            return user_doc
+        except Exception as e:
+            raise
+    
+    async def async_generate(self, requirements_summary: dict) -> str:
+        """
+        Generate user documentation from requirements (async)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+        
+        Returns:
+            Generated user documentation (Markdown)
+        """
+        # Get prompt from centralized prompts config
+        full_prompt = get_user_prompt(requirements_summary)
+        
+        try:
+            user_doc = await self._async_call_llm(full_prompt)
             return user_doc
         except Exception as e:
             raise
@@ -78,7 +94,7 @@ class UserDocumentationAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None
     ) -> str:
         """
-        Generate user documentation and save to file
+        Generate user documentation and save to file (sync version)
         
         Args:
             requirements_summary: Summary from Requirements Analyst
@@ -112,4 +128,51 @@ class UserDocumentationAgent(BaseAgent):
             return file_path
         except Exception as e:
             raise
+    
+    async def async_generate_and_save(
+        self,
+        requirements_summary: dict,
+        output_filename: str = "user_guide.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate user documentation and save to file (async version)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            output_filename: Filename to save
+            project_id: Project ID for context sharing
+            context_manager: Context manager for saving
+            
+        Returns:
+            Absolute path to saved file
+        """
+        import asyncio
+        # Generate documentation (async)
+        user_doc = await self.async_generate(requirements_summary)
+        
+        # Save to file (file I/O in executor)
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(
+            None,
+            lambda: self.file_manager.write_file(output_filename, user_doc)
+        )
+        
+        # Save to context (async)
+        if project_id and context_manager:
+            output = AgentOutput(
+                agent_type=AgentType.USER_DOCUMENTATION,
+                document_type="user_guide",
+                content=user_doc,
+                file_path=file_path,
+                status=DocumentStatus.COMPLETE,
+                generated_at=datetime.now()
+            )
+            await loop.run_in_executor(
+                None,
+                lambda: context_manager.save_agent_output(project_id, output)
+            )
+        
+        return file_path
 

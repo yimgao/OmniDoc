@@ -67,11 +67,34 @@ class DeveloperDocumentationAgent(BaseAgent):
         # Get prompt from centralized prompts config
         full_prompt = get_developer_prompt(requirements_summary, technical_summary, api_summary)
         
-        
-        stats = self.get_stats()
-        
         try:
             developer_doc = self._call_llm(full_prompt)
+            return developer_doc
+        except Exception as e:
+            raise
+    
+    async def async_generate(
+        self,
+        requirements_summary: dict,
+        technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None
+    ) -> str:
+        """
+        Generate developer documentation from requirements, technical, and API specs (async)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary
+        
+        Returns:
+            Generated developer documentation (Markdown)
+        """
+        # Get prompt from centralized prompts config
+        full_prompt = get_developer_prompt(requirements_summary, technical_summary, api_summary)
+        
+        try:
+            developer_doc = await self._async_call_llm(full_prompt)
             return developer_doc
         except Exception as e:
             raise
@@ -86,7 +109,7 @@ class DeveloperDocumentationAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None
     ) -> str:
         """
-        Generate developer documentation and save to file
+        Generate developer documentation and save to file (sync version)
         
         Args:
             requirements_summary: Summary from Requirements Analyst
@@ -122,4 +145,55 @@ class DeveloperDocumentationAgent(BaseAgent):
             return file_path
         except Exception as e:
             raise
+    
+    async def async_generate_and_save(
+        self,
+        requirements_summary: dict,
+        technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None,
+        output_filename: str = "developer_guide.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate developer documentation and save to file (async version)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary
+            output_filename: Filename to save
+            project_id: Project ID for context sharing
+            context_manager: Context manager for saving
+            
+        Returns:
+            Absolute path to saved file
+        """
+        import asyncio
+        # Generate documentation (async)
+        developer_doc = await self.async_generate(requirements_summary, technical_summary, api_summary)
+        
+        # Save to file (file I/O in executor)
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(
+            None,
+            lambda: self.file_manager.write_file(output_filename, developer_doc)
+        )
+        
+        # Save to context (async)
+        if project_id and context_manager:
+            output = AgentOutput(
+                agent_type=AgentType.DEVELOPER_DOCUMENTATION,
+                document_type="developer_guide",
+                content=developer_doc,
+                file_path=file_path,
+                status=DocumentStatus.COMPLETE,
+                generated_at=datetime.now()
+            )
+            await loop.run_in_executor(
+                None,
+                lambda: context_manager.save_agent_output(project_id, output)
+            )
+        
+        return file_path
 

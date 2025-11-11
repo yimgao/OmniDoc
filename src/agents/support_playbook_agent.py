@@ -72,6 +72,31 @@ class SupportPlaybookAgent(BaseAgent):
             logger.error(f"Error generating support playbook: {e}")
             raise
     
+    async def async_generate(
+        self,
+        requirements_summary: dict,
+        user_documentation_summary: Optional[str] = None
+    ) -> str:
+        """
+        Generate support playbook documentation (async)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            user_documentation_summary: Optional User Documentation content
+        
+        Returns:
+            Generated support playbook documentation (Markdown)
+        """
+        full_prompt = get_support_playbook_prompt(requirements_summary, user_documentation_summary)
+        
+        try:
+            support_doc = await self._async_call_llm(full_prompt, temperature=0.7)
+            logger.debug(f"Support Playbook document generated (async) (length: {len(support_doc)} characters)")
+            return support_doc
+        except Exception as e:
+            logger.error(f"Error generating support playbook (async): {e}")
+            raise
+    
     def generate_and_save(
         self,
         requirements_summary: dict,
@@ -81,7 +106,7 @@ class SupportPlaybookAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None
     ) -> str:
         """
-        Generate support playbook and save to file
+        Generate support playbook and save to file (sync version)
         
         Args:
             requirements_summary: Requirements summary
@@ -117,6 +142,59 @@ class SupportPlaybookAgent(BaseAgent):
                 logger.debug("Support playbook saved to context")
             except Exception as e:
                 logger.warning(f"Could not save support playbook to context: {e}")
+        
+        return file_path
+    
+    async def async_generate_and_save(
+        self,
+        requirements_summary: dict,
+        user_documentation_summary: Optional[str] = None,
+        output_filename: str = "support_playbook.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate support playbook and save to file (async version)
+        
+        Args:
+            requirements_summary: Requirements summary
+            user_documentation_summary: Optional user documentation
+            output_filename: Output filename
+            project_id: Project ID for context
+            context_manager: Context manager instance
+        
+        Returns:
+            Path to saved file
+        """
+        import asyncio
+        logger.info(f"Generating support playbook (async) for project: {project_id}")
+        
+        # Generate documentation (async)
+        support_doc = await self.async_generate(requirements_summary, user_documentation_summary)
+        
+        # Save to file (file I/O in executor)
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(
+            None,
+            lambda: self.file_manager.write_file(output_filename, support_doc)
+        )
+        logger.info(f"Support playbook saved (async) to: {file_path}")
+        
+        # Save to context (async)
+        if project_id and context_manager:
+            output = AgentOutput(
+                agent_type=AgentType.SUPPORT_PLAYBOOK,
+                document_type="support_playbook",
+                content=support_doc,
+                file_path=file_path,
+                status=DocumentStatus.COMPLETE,
+                generated_at=datetime.now()
+            )
+            await loop.run_in_executor(
+                None,
+                lambda: context_manager.save_agent_output(project_id, output)
+            )
+            logger.debug("Support playbook saved to context (async)")
         
         return file_path
 

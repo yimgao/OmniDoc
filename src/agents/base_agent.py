@@ -316,12 +316,16 @@ class BaseAgent(ABC):
         return cleaned
     
     @abstractmethod
-    def generate(self, input_data: str) -> str:
+    def generate(self, *args, **kwargs) -> str:
         """
         Generate documentation (abstract method - must be implemented by subclasses)
         
+        This is the synchronous version. Subclasses can implement async_generate() for
+        better performance in async contexts.
+        
         Args:
-            input_data: Input to process (user idea, requirements, etc.)
+            *args: Positional arguments (varies by agent)
+            **kwargs: Keyword arguments (varies by agent)
             
         Returns:
             Generated documentation content
@@ -333,7 +337,7 @@ class BaseAgent(ABC):
         Generate documentation (async version)
         
         Default implementation runs sync generate() in a thread pool.
-        Subclasses can override this for native async support.
+        Subclasses can override this for native async support to improve performance.
         
         Args:
             *args: Arguments passed to generate() method
@@ -343,6 +347,7 @@ class BaseAgent(ABC):
             Generated documentation content
         """
         # Default: Run sync generate() in thread pool
+        # Subclasses should override this to use _async_call_llm directly for better performance
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,

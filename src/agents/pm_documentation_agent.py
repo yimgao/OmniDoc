@@ -59,11 +59,28 @@ class PMDocumentationAgent(BaseAgent):
         # Get prompt from centralized prompts config
         full_prompt = get_pm_prompt(requirements_summary, project_charter_summary)
         
-        
-        stats = self.get_stats()
-        
         try:
             pm_doc = self._call_llm(full_prompt)
+            return pm_doc
+        except Exception as e:
+            raise
+    
+    async def async_generate(self, requirements_summary: dict, project_charter_summary: Optional[str] = None) -> str:
+        """
+        Generate PM documentation from requirements and project charter (async)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            project_charter_summary: Optional Project Charter content
+        
+        Returns:
+            Generated PM documentation (Markdown)
+        """
+        # Get prompt from centralized prompts config
+        full_prompt = get_pm_prompt(requirements_summary, project_charter_summary)
+        
+        try:
+            pm_doc = await self._async_call_llm(full_prompt)
             return pm_doc
         except Exception as e:
             raise
@@ -77,10 +94,11 @@ class PMDocumentationAgent(BaseAgent):
         context_manager: Optional[ContextManager] = None
     ) -> str:
         """
-        Generate PM documentation and save to file
+        Generate PM documentation and save to file (sync version)
         
         Args:
             requirements_summary: Summary from Requirements Analyst
+            project_charter_summary: Optional Project Charter content
             output_filename: Filename to save
             project_id: Project ID for context sharing
             context_manager: Context manager for saving
@@ -111,4 +129,53 @@ class PMDocumentationAgent(BaseAgent):
             return file_path
         except Exception as e:
             raise
+    
+    async def async_generate_and_save(
+        self,
+        requirements_summary: dict,
+        project_charter_summary: Optional[str] = None,
+        output_filename: str = "project_plan.md",
+        project_id: Optional[str] = None,
+        context_manager: Optional[ContextManager] = None
+    ) -> str:
+        """
+        Generate PM documentation and save to file (async version)
+        
+        Args:
+            requirements_summary: Summary from Requirements Analyst
+            project_charter_summary: Optional Project Charter content
+            output_filename: Filename to save
+            project_id: Project ID for context sharing
+            context_manager: Context manager for saving
+            
+        Returns:
+            Absolute path to saved file
+        """
+        import asyncio
+        # Generate documentation (async)
+        pm_doc = await self.async_generate(requirements_summary, project_charter_summary)
+        
+        # Save to file (file I/O in executor)
+        loop = asyncio.get_event_loop()
+        file_path = await loop.run_in_executor(
+            None,
+            lambda: self.file_manager.write_file(output_filename, pm_doc)
+        )
+        
+        # Save to context (async)
+        if project_id and context_manager:
+            output = AgentOutput(
+                agent_type=AgentType.PM_DOCUMENTATION,
+                document_type="project_plan",
+                content=pm_doc,
+                file_path=file_path,
+                status=DocumentStatus.COMPLETE,
+                generated_at=datetime.now()
+            )
+            await loop.run_in_executor(
+                None,
+                lambda: context_manager.save_agent_output(project_id, output)
+            )
+        
+        return file_path
 
