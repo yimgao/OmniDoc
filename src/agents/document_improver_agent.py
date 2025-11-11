@@ -77,7 +77,8 @@ class DocumentImproverAgent(BaseAgent):
         quality_feedback: str,
         focus_areas: Optional[list] = None,
         quality_score: Optional[float] = None,
-        quality_details: Optional[Dict] = None
+        quality_details: Optional[Dict] = None,
+        structured_feedback: Optional[Dict] = None
     ) -> str:
         """
         Improve a document based on quality review feedback
@@ -89,6 +90,8 @@ class DocumentImproverAgent(BaseAgent):
             focus_areas: Optional list of specific areas to focus on
             quality_score: Optional current quality score (0-100)
             quality_details: Optional quality check details (word_count, sections, readability)
+            structured_feedback: Optional structured JSON feedback from LLM-as-Judge
+                               (dict with score, feedback, suggestion, missing_sections, etc.)
         
         Returns:
             Improved document content
@@ -137,6 +140,45 @@ class DocumentImproverAgent(BaseAgent):
                     score_context += "   - Use clearer, more direct language\n"
                     score_context += "   - Add more examples and explanations\n"
         
+        # Build structured feedback context if available (LLM-as-Judge)
+        structured_context = ""
+        if structured_feedback:
+            structured_context = "\n\n## STRUCTURED QUALITY FEEDBACK (LLM-as-Judge):\n"
+            structured_context += f"**Quality Score: {structured_feedback.get('score', 5.0):.1f}/10**\n\n"
+            structured_context += f"**Overall Feedback:** {structured_feedback.get('feedback', 'No feedback')}\n\n"
+            structured_context += f"**Primary Suggestion:** {structured_feedback.get('suggestion', 'No specific suggestion')}\n\n"
+            
+            if structured_feedback.get('missing_sections'):
+                structured_context += f"**Missing Sections (MUST ADD):** {', '.join(structured_feedback['missing_sections'])}\n\n"
+            
+            if structured_feedback.get('strengths'):
+                structured_context += f"**Strengths:**\n"
+                for strength in structured_feedback['strengths']:
+                    structured_context += f"- {strength}\n"
+                structured_context += "\n"
+            
+            if structured_feedback.get('weaknesses'):
+                structured_context += f"**Weaknesses (MUST ADDRESS):**\n"
+                for weakness in structured_feedback['weaknesses']:
+                    structured_context += f"- {weakness}\n"
+                structured_context += "\n"
+            
+            if structured_feedback.get('readability_issues'):
+                structured_context += f"**Readability Issues:**\n"
+                for issue in structured_feedback['readability_issues']:
+                    structured_context += f"- {issue}\n"
+                structured_context += "\n"
+            
+            if structured_feedback.get('priority_improvements'):
+                structured_context += f"**Priority Improvements (HIGH PRIORITY):**\n"
+                for improvement in structured_feedback['priority_improvements'][:5]:  # Limit to top 5
+                    if isinstance(improvement, dict):
+                        structured_context += f"- **{improvement.get('area', 'Unknown')}**: {improvement.get('issue', '')}\n"
+                        structured_context += f"  → Suggestion: {improvement.get('suggestion', '')}\n"
+                structured_context += "\n"
+            
+            structured_context += "**CRITICAL:** Address ALL items in the structured feedback above. Focus on the priority improvements first.\n"
+        
         prompt = f"""You are a Documentation Improvement Specialist. Your task is to significantly improve a document based on quality review feedback and quality metrics.
 
 CRITICAL INSTRUCTIONS:
@@ -157,6 +199,7 @@ CRITICAL INSTRUCTIONS:
 9. If readability is poor, rewrite for clarity while maintaining technical accuracy
 {focus_text}
 {score_context}
+{structured_context}
 
 === ORIGINAL DOCUMENT ({document_type}) ===
 

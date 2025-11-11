@@ -11,7 +11,9 @@ from src.context.shared_context import AgentType, DocumentStatus, AgentOutput
 from src.quality.quality_checker import QualityChecker
 from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
 from src.rate_limit.queue_manager import RequestQueue
-from prompts.system_prompts import get_quality_reviewer_prompt
+from prompts.system_prompts import get_quality_reviewer_prompt, get_structured_quality_feedback_prompt
+import json
+import re
 
 
 class QualityReviewerAgent(BaseAgent):
@@ -160,4 +162,147 @@ class QualityReviewerAgent(BaseAgent):
             return file_path
         except Exception as e:
             raise
+    
+    def generate_structured_feedback(
+        self,
+        document_content: str,
+        document_type: str,
+        automated_scores: Optional[Dict] = None
+    ) -> Dict:
+        """
+        Generate structured JSON feedback for a single document (LLM-as-Judge)
+        
+        This method uses LLM to generate structured, actionable feedback in JSON format
+        that can be directly used by DocumentImproverAgent for precise improvements.
+        
+        Args:
+            document_content: The document content to review
+            document_type: Type of document (e.g., "api_documentation", "technical_documentation")
+            automated_scores: Optional automated quality scores from QualityChecker
+        
+        Returns:
+            Dict with structured feedback:
+            {
+                "score": float (1-10),
+                "feedback": str,
+                "suggestion": str,
+                "missing_sections": List[str],
+                "strengths": List[str],
+                "weaknesses": List[str],
+                "readability_issues": List[str],
+                "priority_improvements": List[Dict]
+            }
+        """
+        # Get structured feedback prompt
+        prompt = get_structured_quality_feedback_prompt(
+            document_content=document_content,
+            document_type=document_type,
+            automated_scores=automated_scores
+        )
+        
+        try:
+            # Call LLM to generate structured feedback
+            response = self._call_llm(prompt)
+            
+            # Extract JSON from response (handle cases where LLM adds markdown or explanations)
+            json_match = re.search(r'\{[^{}]*"score"[^{}]*\}', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(0)
+            else:
+                # Try to find JSON in code blocks
+                json_block = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+                if json_block:
+                    json_str = json_block.group(1)
+                else:
+                    # Try to parse entire response as JSON
+                    json_str = response.strip()
+            
+            # Parse JSON
+            try:
+                feedback_data = json.loads(json_str)
+            except json.JSONDecodeError:
+                # If JSON parsing fails, try to extract key fields manually
+                logger.warning(f"Failed to parse JSON feedback, attempting fallback extraction")
+                feedback_data = self._extract_feedback_fallback(response)
+            
+            # Validate and normalize feedback structure
+            feedback_data = self._validate_feedback_structure(feedback_data)
+            
+            return feedback_data
+            
+        except Exception as e:
+            logger.error(f"Error generating structured feedback: {e}", exc_info=True)
+            # Return fallback feedback structure
+            return {
+                "score": automated_scores.get("overall_score", 5.0) / 10.0 if automated_scores else 5.0,
+                "feedback": f"Quality review failed: {str(e)}",
+                "suggestion": "Review the document manually and check for completeness and clarity",
+                "missing_sections": automated_scores.get("sections", {}).get("missing_sections", [])[:5] if automated_scores else [],
+                "strengths": [],
+                "weaknesses": ["Quality review generation failed"],
+                "readability_issues": [],
+                "priority_improvements": []
+            }
+    
+    def _extract_feedback_fallback(self, response: str) -> Dict:
+        """Extract feedback from response when JSON parsing fails"""
+        feedback_data = {
+            "score": 5.0,
+            "feedback": response[:200] if len(response) > 200 else response,
+            "suggestion": "Improve document structure and completeness",
+            "missing_sections": [],
+            "strengths": [],
+            "weaknesses": [],
+            "readability_issues": [],
+            "priority_improvements": []
+        }
+        
+        # Try to extract score
+        score_match = re.search(r'"score"\s*:\s*([\d.]+)', response)
+        if score_match:
+            try:
+                feedback_data["score"] = float(score_match.group(1))
+            except ValueError:
+                pass
+        
+        # Try to extract suggestion
+        suggestion_match = re.search(r'"suggestion"\s*:\s*"([^"]+)"', response)
+        if suggestion_match:
+            feedback_data["suggestion"] = suggestion_match.group(1)
+        
+        return feedback_data
+    
+    def _validate_feedback_structure(self, feedback_data: Dict) -> Dict:
+        """Validate and normalize feedback structure"""
+        # Ensure all required fields exist
+        validated = {
+            "score": float(feedback_data.get("score", 5.0)),
+            "feedback": str(feedback_data.get("feedback", "No feedback provided")),
+            "suggestion": str(feedback_data.get("suggestion", "Review document for improvements")),
+            "missing_sections": list(feedback_data.get("missing_sections", [])),
+            "strengths": list(feedback_data.get("strengths", [])),
+            "weaknesses": list(feedback_data.get("weaknesses", [])),
+            "readability_issues": list(feedback_data.get("readability_issues", [])),
+            "priority_improvements": list(feedback_data.get("priority_improvements", []))
+        }
+        
+        # Ensure score is in valid range
+        validated["score"] = max(1.0, min(10.0, validated["score"]))
+        
+        # Ensure lists are strings
+        for key in ["missing_sections", "strengths", "weaknesses", "readability_issues"]:
+            validated[key] = [str(item) for item in validated[key]]
+        
+        # Validate priority_improvements structure
+        validated_priorities = []
+        for item in validated["priority_improvements"]:
+            if isinstance(item, dict):
+                validated_priorities.append({
+                    "area": str(item.get("area", "Unknown")),
+                    "issue": str(item.get("issue", "")),
+                    "suggestion": str(item.get("suggestion", ""))
+                })
+        validated["priority_improvements"] = validated_priorities
+        
+        return validated
 

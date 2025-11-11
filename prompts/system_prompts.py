@@ -2,7 +2,7 @@
 System Prompts Configuration
 All agent prompts centralized here for easy editing
 """
-from typing import Optional
+from typing import Optional, Dict
 from src.utils.document_summarizer import summarize_document
 
 # Readability Guidelines - Applied to all prompts
@@ -1008,6 +1008,99 @@ def get_quality_reviewer_prompt(all_documentation: dict) -> str:
     
     prompt = apply_readability_guidelines(QUALITY_REVIEWER_PROMPT)
     return f"{prompt}\n\n{docs_text}\n\nGenerate the complete quality review report:"
+
+
+# Structured JSON feedback prompt for LLM-as-Judge
+STRUCTURED_QUALITY_FEEDBACK_PROMPT = """You are a Documentation Quality Reviewer (LLM-as-Judge). Your task is to review a single document and provide structured, actionable feedback in JSON format.
+
+CRITICAL: You MUST respond with ONLY valid JSON. No markdown, no explanations, just pure JSON.
+
+Analyze the provided document and return a JSON object with the following structure:
+
+{
+    "score": <float 1-10>,
+    "feedback": "<string: Overall feedback about the document quality>",
+    "suggestion": "<string: Specific suggestion for improvement, e.g., 'Add a ## Error Handling section to document API error responses'>",
+    "missing_sections": ["<section 1>", "<section 2>", ...],
+    "strengths": ["<strength 1>", "<strength 2>", ...],
+    "weaknesses": ["<weakness 1>", "<weakness 2>", ...],
+    "readability_issues": ["<issue 1>", "<issue 2>", ...],
+    "priority_improvements": [
+        {
+            "area": "<area name>",
+            "issue": "<description>",
+            "suggestion": "<specific suggestion>"
+        }
+    ]
+}
+
+Guidelines:
+- score: Rate the document quality from 1-10 (10 = excellent, 1 = poor)
+- feedback: Brief overall assessment (2-3 sentences)
+- suggestion: ONE specific, actionable improvement suggestion (e.g., "Add a ## Error Handling section")
+- missing_sections: List of section titles that should be added (e.g., ["Error Handling", "Rate Limiting"])
+- strengths: List of what the document does well
+- weaknesses: List of major issues
+- readability_issues: List of readability problems (e.g., "Complex sentences", "Missing examples")
+- priority_improvements: List of 3-5 high-priority improvement areas with specific suggestions
+
+Focus on:
+1. Completeness (missing sections, incomplete content)
+2. Clarity (readability, structure, examples)
+3. Technical accuracy
+4. Consistency (terminology, formatting)
+
+Return ONLY the JSON object, nothing else."""
+
+
+def get_structured_quality_feedback_prompt(document_content: str, document_type: str, automated_scores: Optional[Dict] = None) -> str:
+    """
+    Get prompt for structured JSON quality feedback (LLM-as-Judge)
+    
+    Args:
+        document_content: The document content to review
+        document_type: Type of document (e.g., "api_documentation")
+        automated_scores: Optional automated quality scores from QualityChecker
+    
+    Returns:
+        Prompt string for structured JSON feedback
+    """
+    # Truncate document if too long (focus on structure and key sections)
+    if len(document_content) > 3000:
+        # Take first 2000 chars and last 1000 chars to get structure + conclusion
+        document_preview = document_content[:2000] + "\n\n[... document truncated for review ...]\n\n" + document_content[-1000:]
+    else:
+        document_preview = document_content
+    
+    prompt = STRUCTURED_QUALITY_FEEDBACK_PROMPT
+    
+    # Add automated scores context if available
+    if automated_scores:
+        score_context = "\n\n## Automated Quality Metrics:\n"
+        score_context += f"- Overall Score: {automated_scores.get('overall_score', 0):.1f}/100\n"
+        
+        word_count_data = automated_scores.get('word_count', {})
+        sections_data = automated_scores.get('sections', {})
+        readability_data = automated_scores.get('readability', {})
+        
+        score_context += f"- Word Count: {word_count_data.get('word_count', 0)} (min: {word_count_data.get('min_threshold', 100)}, passed: {word_count_data.get('passed', False)})\n"
+        score_context += f"- Section Completeness: {sections_data.get('completeness_score', 0):.1f}% ({sections_data.get('found_count', 0)}/{sections_data.get('required_count', 0)} sections)\n"
+        if sections_data.get('missing_sections'):
+            missing = sections_data.get('missing_sections', [])[:5]
+            score_context += f"- Missing Sections: {', '.join([s.replace('^#+\\\\s+', '').replace('\\\\s+', ' ') for s in missing])}\n"
+        score_context += f"- Readability: {readability_data.get('readability_score', 0):.1f} ({readability_data.get('level', 'unknown')})\n"
+        
+        prompt += score_context
+        prompt += "\n\nConsider these automated metrics in your review. Focus on addressing low scores and missing sections."
+    
+    return f"""{prompt}
+
+## Document Type: {document_type}
+
+## Document Content:
+{document_preview}
+
+Return ONLY the JSON object with your quality assessment:"""
 
 
 def get_user_prompt(requirements_summary: dict) -> str:
