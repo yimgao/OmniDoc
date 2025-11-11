@@ -139,6 +139,11 @@
                         <p class="text-xs sm:text-sm text-gray-500 hidden sm:block">AI Documentation Generator</p>
                     </div>
                 </div>
+                <!-- WebSocket Status Indicator -->
+                <div id="wsStatus" class="flex items-center gap-2 text-xs text-gray-500 hidden">
+                    <div id="wsIndicator" class="w-2 h-2 rounded-full bg-gray-400"></div>
+                    <span id="wsStatusText">Disconnected</span>
+                </div>
             </div>
         </div>
     </header>
@@ -147,6 +152,19 @@
     <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <!-- Status Message -->
         <div id="status" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
+        
+        <!-- Error Details (Expandable) -->
+        <div id="errorDetails" class="hidden mb-4 bg-red-50 border border-red-200 rounded-lg overflow-hidden">
+            <div class="px-4 py-3 flex items-center justify-between cursor-pointer" onclick="toggleErrorDetails()">
+                <div class="flex items-center gap-2">
+                    <span class="text-red-600 font-semibold text-sm">Error Details</span>
+                    <span id="errorDetailsToggle" class="text-red-400 text-xs">▼</span>
+                </div>
+            </div>
+            <div id="errorDetailsContent" class="hidden px-4 pb-3">
+                <pre id="errorDetailsText" class="text-xs text-red-700 whitespace-pre-wrap font-mono bg-red-100 p-3 rounded border border-red-200"></pre>
+            </div>
+        </div>
 
         <!-- Generation Form Card -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
@@ -218,6 +236,13 @@
         <div id="results" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <div class="flex items-center justify-between mb-4 sm:mb-6">
                 <h2 class="text-lg sm:text-xl font-bold text-gray-900">Generated Documents</h2>
+                <button
+                    id="downloadAllBtn"
+                    class="hidden px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all"
+                    onclick="downloadAllDocuments()"
+                >
+                    📦 Download All
+                </button>
             </div>
             <div id="resultsContainer" class="space-y-4"></div>
         </div>

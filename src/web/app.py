@@ -39,7 +39,7 @@ class WebSocketManager:
         """Accept a WebSocket connection for a project"""
         await websocket.accept()
         if project_id not in self.active_connections:
-            self.active_connections[project_id] = set()
+            self.active_connections[project_id] = set() 
         self.active_connections[project_id].add(websocket)
         logger.info(f"WebSocket connected for project: {project_id} (total connections: {len(self.active_connections[project_id])})")
     
@@ -854,7 +854,8 @@ async def get_status(project_id: str):
         "project_id": project_id,
         "status": status["status"],
         "completed_agents": status.get("completed_agents", []),
-        "error": status.get("error")
+        "error": status.get("error"),
+        "error_details": status.get("error")  # Include error details for frontend display
     }
 
 
@@ -933,7 +934,7 @@ async def get_results(project_id: str):
                             # Get file extension
                             doc["file_extension"] = path_obj.suffix.lower()
                     except (TypeError, OSError, ValueError) as e:
-                        logger.warning(f"Could not get metadata for {file_path}: {e}")
+                            logger.warning(f"Could not get metadata for {file_path}: {e}")
     
     # Add summary statistics
     total_size = 0
@@ -1038,6 +1039,69 @@ async def preview_document(project_id: str, doc_type: str):
     except Exception as e:
         logger.error(f"Error reading file {file_path}: {e}")
         raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+
+@app.get("/api/download-all/{project_id}")
+async def download_all_documents(project_id: str):
+    """Download all generated documents as a ZIP file"""
+    import zipfile
+    import io
+    
+    status = context_manager.get_project_status(project_id)
+    
+    if not status:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if status["status"] != "complete":
+        raise HTTPException(status_code=400, detail="Generation not complete")
+    
+    results = status.get("results", {})
+    files = results.get("files", {})
+    
+    if not files:
+        raise HTTPException(status_code=404, detail="No documents found")
+    
+    try:
+        # Create a temporary ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for doc_type, file_path in files.items():
+                # Handle case where file_path might be a dict
+                if isinstance(file_path, dict):
+                    file_path = file_path.get("path") or file_path.get("file_path") or file_path.get("value")
+                
+                if not isinstance(file_path, str) or not file_path:
+                    continue
+                
+                try:
+                    path_obj = Path(file_path)
+                    if path_obj.exists() and path_obj.is_file():
+                        # Read file content and add to ZIP
+                        file_content = path_obj.read_bytes()
+                        # Use just the filename in ZIP to avoid path issues
+                        zip_filename = f"{doc_type}/{path_obj.name}"
+                        zip_file.writestr(zip_filename, file_content)
+                        logger.debug(f"Added {doc_type} to ZIP: {zip_filename}")
+                except Exception as e:
+                    logger.warning(f"Could not add {doc_type} to ZIP: {e}")
+                    continue
+        
+        # Prepare response
+        zip_buffer.seek(0)
+        zip_filename = f"docu-gen-{project_id}.zip"
+        
+        return Response(
+            content=zip_buffer.getvalue(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f"attachment; filename={zip_filename}",
+                "Content-Length": str(zip_buffer.getbuffer().nbytes)
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error creating ZIP file for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error creating ZIP file: {str(e)}")
 
 
 @app.get("/api/download/{project_id}/{doc_type}")

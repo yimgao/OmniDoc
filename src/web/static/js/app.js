@@ -10,12 +10,23 @@ const generateBtn = document.getElementById('generateBtn');
 const previewModal = document.getElementById('previewModal');
 const previewContent = document.getElementById('previewContent');
 const closePreviewBtn = document.getElementById('closePreview');
+const wsStatus = document.getElementById('wsStatus');
+const wsIndicator = document.getElementById('wsIndicator');
+const wsStatusText = document.getElementById('wsStatusText');
+const errorDetails = document.getElementById('errorDetails');
+const errorDetailsContent = document.getElementById('errorDetailsContent');
+const errorDetailsText = document.getElementById('errorDetailsText');
+const errorDetailsToggle = document.getElementById('errorDetailsToggle');
+const downloadAllBtn = document.getElementById('downloadAllBtn');
 
 let projectId = null;
 let websocket = null;
 let reconnectAttempts = 0;
 let pollInterval = null;
+let wsConnected = false;
+let isPolling = false;
 const maxReconnectAttempts = 5;
+let allDocuments = []; // Store all documents for download all
 
 // Form submission
 form.addEventListener('submit', async (e) => {
@@ -32,10 +43,13 @@ form.addEventListener('submit', async (e) => {
     generateBtn.textContent = 'Generating...';
     generateBtn.classList.add('loading');
     showStatus('Starting documentation generation...', 'info');
+    hideErrorDetails();
     progressDiv.classList.remove('hidden');
     resultsDiv.classList.add('hidden');
+    downloadAllBtn.classList.add('hidden');
     progressBar.style.width = '0%';
     progressText.textContent = '0%';
+    allDocuments = []; // Clear previous documents
     
     // Scroll to progress
     progressDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -46,17 +60,46 @@ form.addEventListener('submit', async (e) => {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({user_idea: userIdea, profile: profile})
         });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(errorData.detail || `HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
         projectId = data.project_id;
         connectWebSocket(projectId);
     } catch (error) {
         showStatus('Error: ' + error.message, 'error');
+        showErrorDetails('Generation start failed', error.message);
         generateBtn.disabled = false;
         generateBtn.textContent = 'Generate Documentation';
         generateBtn.classList.remove('loading');
         progressDiv.classList.add('hidden');
+        updateWebSocketStatus(false, false);
     }
 });
+
+// Update WebSocket status indicator
+function updateWebSocketStatus(connected, polling = false) {
+    wsConnected = connected;
+    isPolling = polling;
+    wsStatus.classList.remove('hidden');
+    
+    if (connected && !polling) {
+        wsIndicator.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+        wsStatusText.textContent = 'Connected (WebSocket)';
+        wsStatusText.className = 'text-xs text-green-600';
+    } else if (polling) {
+        wsIndicator.className = 'w-2 h-2 rounded-full bg-yellow-500';
+        wsStatusText.textContent = 'Polling (Fallback)';
+        wsStatusText.className = 'text-xs text-yellow-600';
+    } else {
+        wsIndicator.className = 'w-2 h-2 rounded-full bg-gray-400';
+        wsStatusText.textContent = 'Disconnected';
+        wsStatusText.className = 'text-xs text-gray-500';
+    }
+}
 
 // WebSocket connection
 function connectWebSocket(projectId) {
@@ -64,8 +107,10 @@ function connectWebSocket(projectId) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     websocket = new WebSocket(`${protocol}//${window.location.host}/ws/${projectId}`);
     reconnectAttempts = 0;
+    updateWebSocketStatus(false, false);
     
     websocket.onopen = () => {
+        updateWebSocketStatus(true, false);
         showStatus('Connected. Generating documentation...', 'info');
     };
     websocket.onmessage = (event) => {
@@ -76,10 +121,12 @@ function connectWebSocket(projectId) {
         }
     };
     websocket.onerror = () => {
+        updateWebSocketStatus(false, false);
         showStatus('Connection error. Using fallback...', 'error');
         fallbackToPolling(projectId);
     };
     websocket.onclose = () => {
+        updateWebSocketStatus(false, false);
         if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts++;
             setTimeout(() => connectWebSocket(projectId), 1000 * reconnectAttempts);
@@ -132,7 +179,9 @@ function handleWebSocketMessage(message) {
             }, 300);
             break;
         case 'error':
-            showStatus('Error: ' + (message.message || 'Unknown error'), 'error');
+            const errorMsg = message.message || 'Unknown error';
+            showStatus('Error: ' + errorMsg, 'error');
+            showErrorDetails(errorMsg, message.error || message.details || null);
             generateBtn.disabled = false;
             generateBtn.textContent = 'Generate Documentation';
             generateBtn.classList.remove('loading');
@@ -141,6 +190,7 @@ function handleWebSocketMessage(message) {
                 websocket.close();
                 websocket = null;
             }
+            updateWebSocketStatus(false, false);
             break;
     }
 }
@@ -162,8 +212,48 @@ function showStatus(message, type) {
     statusDiv.classList.remove('hidden');
 }
 
+// Show error details
+function showErrorDetails(message, details) {
+    if (message || details) {
+        errorDetails.classList.remove('hidden');
+        let errorText = message || 'Unknown error';
+        if (details) {
+            if (typeof details === 'string') {
+                errorText += '\n\nDetails: ' + details;
+            } else {
+                errorText += '\n\nDetails: ' + JSON.stringify(details, null, 2);
+            }
+        }
+        errorDetailsText.textContent = errorText;
+    } else {
+        errorDetails.classList.add('hidden');
+    }
+}
+
+// Toggle error details
+function toggleErrorDetails() {
+    const isHidden = errorDetailsContent.classList.contains('hidden');
+    if (isHidden) {
+        errorDetailsContent.classList.remove('hidden');
+        errorDetailsToggle.textContent = '▲';
+    } else {
+        errorDetailsContent.classList.add('hidden');
+        errorDetailsToggle.textContent = '▼';
+    }
+}
+window.toggleErrorDetails = toggleErrorDetails; // Make it global
+
+// Hide error details
+function hideErrorDetails() {
+    errorDetails.classList.add('hidden');
+    errorDetailsContent.classList.add('hidden');
+    errorDetailsToggle.textContent = '▼';
+}
+
 // Fallback to polling
 function fallbackToPolling(projectId) {
+    updateWebSocketStatus(false, true);
+    showStatus('WebSocket unavailable. Using automatic refresh...', 'info');
     if (pollInterval) clearInterval(pollInterval);
     pollInterval = setInterval(() => checkStatus(projectId), 2000);
     checkStatus(projectId);
@@ -198,11 +288,14 @@ async function checkStatus(projectId) {
                 clearInterval(pollInterval);
                 pollInterval = null;
             }
-            showStatus('Generation failed. Please try again.', 'error');
+            const errorMsg = data.error || 'Generation failed. Please try again.';
+            showStatus('Generation failed: ' + errorMsg, 'error');
+            showErrorDetails(errorMsg, data.error_details || null);
             generateBtn.disabled = false;
             generateBtn.textContent = 'Generate Documentation';
             generateBtn.classList.remove('loading');
             progressDiv.classList.add('hidden');
+            updateWebSocketStatus(false, false);
         }
     } catch (error) {
         console.error('Error checking status:', error);
@@ -218,6 +311,9 @@ async function fetchResults() {
         resultsContainer.innerHTML = '';
         const documentsByLevel = data.documents_by_level || {};
         
+        // Collect all documents for download all
+        allDocuments = [];
+        
         const levels = [
             { key: 'level_1_strategic', title: 'Strategic Documents', icon: '🎯', color: 'red' },
             { key: 'level_2_product', title: 'Product Documents', icon: '📊', color: 'blue' },
@@ -230,17 +326,33 @@ async function fetchResults() {
             if (levelData && levelData.documents && levelData.documents.length > 0) {
                 const section = createLevelSection(level, levelData);
                 resultsContainer.appendChild(section);
+                // Collect documents for download all
+                levelData.documents.forEach(doc => {
+                    allDocuments.push({
+                        type: doc.type,
+                        display_name: doc.display_name,
+                        file_path: doc.file_path
+                    });
+                });
             }
         });
         
         if (resultsContainer.children.length === 0) {
             resultsContainer.innerHTML = '<p class="text-gray-500 text-center py-8">No documents found</p>';
+            downloadAllBtn.classList.add('hidden');
+        } else {
+            // Show download all button if documents are available
+            downloadAllBtn.classList.remove('hidden');
         }
+        
+        // Hide error details on success
+        hideErrorDetails();
         
         resultsDiv.classList.remove('hidden');
     } catch (error) {
         console.error('Error fetching results:', error);
         showStatus('Error loading results: ' + error.message, 'error');
+        showErrorDetails('Error loading results', error.message);
     }
 }
 
@@ -338,4 +450,47 @@ document.addEventListener('keydown', (e) => {
         previewModal.classList.add('hidden');
     }
 });
+
+// Download all documents as ZIP
+async function downloadAllDocuments() {
+    if (!projectId || allDocuments.length === 0) {
+        showStatus('No documents available for download', 'error');
+        return;
+    }
+    
+    try {
+        downloadAllBtn.disabled = true;
+        downloadAllBtn.textContent = '📦 Downloading...';
+        
+        // Call API to generate ZIP
+        const response = await fetch(`/api/download-all/${projectId}`, {
+            method: 'GET'
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to generate ZIP file');
+        }
+        
+        // Get blob and create download link
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `docu-gen-${projectId}-${new Date().toISOString().split('T')[0]}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        showStatus('All documents downloaded successfully!', 'success');
+    } catch (error) {
+        console.error('Error downloading all documents:', error);
+        showStatus('Error downloading all documents: ' + error.message, 'error');
+        showErrorDetails('Download error', error.message);
+    } finally {
+        downloadAllBtn.disabled = false;
+        downloadAllBtn.textContent = '📦 Download All';
+    }
+}
+window.downloadAllDocuments = downloadAllDocuments; // Make it global
 
