@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCU-GEN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <style>
+        /* Mobile-first clean styles */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+        }
+        .doc-item {
+            transition: all 0.2s ease;
+        }
+        .doc-item:hover {
+            background: #f9fafb;
+            transform: translateX(4px);
+        }
+        .markdown-preview {
+            max-height: 60vh;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .markdown-preview h1 { 
+            font-size: 1.5em; 
+            font-weight: 600; 
+            margin: 1em 0 0.5em 0; 
+            color: #1f2937;
+        }
+        .markdown-preview h2 { 
+            font-size: 1.3em; 
+            font-weight: 600; 
+            margin: 0.8em 0 0.4em 0; 
+            color: #374151;
+        }
+        .markdown-preview h3 { 
+            font-size: 1.1em; 
+            font-weight: 600; 
+            margin: 0.6em 0 0.3em 0; 
+            color: #4b5563;
+        }
+        .markdown-preview p { 
+            margin: 0.75em 0; 
+            color: #4b5563;
+        }
+        .markdown-preview ul, .markdown-preview ol {
+            margin: 0.75em 0;
+            padding-left: 1.5em;
+        }
+        .markdown-preview li {
+            margin: 0.5em 0;
+        }
+        .markdown-preview pre {
+            background: #f3f4f6;
+            padding: 1em;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1em 0;
+            border: 1px solid #e5e7eb;
+        }
+        .markdown-preview code {
+            background: #f3f4f6;
+            padding: 0.2em 0.5em;
+            border-radius: 4px;
+            font-size: 0.9em;
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #dc2626;
+        }
+        .markdown-preview pre code {
+            background: transparent;
+            padding: 0;
+            color: #1f2937;
+        }
+        .markdown-preview table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+            font-size: 0.9em;
+        }
+        .markdown-preview table th,
+        .markdown-preview table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.75em;
+            text-align: left;
+        }
+        .markdown-preview table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .markdown-preview a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+        .markdown-preview a:hover {
+            color: #1d4ed8;
+        }
+        .markdown-preview blockquote {
+            border-left: 4px solid #3b82f6;
+            padding-left: 1em;
+            margin: 1em 0;
+            color: #6b7280;
+            font-style: italic;
+        }
+        
+        /* Smooth scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Loading animation */
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <span class="text-white font-bold text-lg">DG</span>
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-bold text-gray-900">DOCU-GEN</h1>
+                        <p class="text-xs sm:text-sm text-gray-500 hidden sm:block">AI Documentation Generator</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content - Centered -->
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <!-- Status Message -->
+        <div id="status" class="hidden mb-4 px-4 py-3 rounded-lg text-sm"></div>
+
+        <!-- Generation Form Card -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
+            <form id="generateForm" class="space-y-4 sm:space-y-5">
+                <div>
+                    <label for="userIdea" class="block text-sm font-semibold text-gray-700 mb-2">
+                        Project Idea
+                    </label>
+                    <textarea
+                        id="userIdea"
+                        rows="5"
+                        class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
+                        placeholder="Describe your project idea in detail..."
+                        required
+                    ></textarea>
+                    <p class="mt-2 text-xs text-gray-500">Be as detailed as possible for better results</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                        Project Profile
+                    </label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+                            <input type="radio" name="profile" value="team" checked class="sr-only peer">
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900 text-sm">Team</div>
+                                <div class="text-xs text-gray-500 mt-1">All Documents</div>
+                            </div>
+                            <div class="ml-2 w-4 h-4 border-2 border-gray-300 rounded-full peer-checked:border-blue-600 peer-checked:bg-blue-600 flex items-center justify-center">
+                                <div class="w-2 h-2 bg-white rounded-full hidden peer-checked:block"></div>
+                            </div>
+                        </label>
+                        <label class="flex items-center p-3 border-2 border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50">
+                            <input type="radio" name="profile" value="individual" class="sr-only peer">
+                            <div class="flex-1">
+                                <div class="font-medium text-gray-900 text-sm">Individual</div>
+                                <div class="text-xs text-gray-500 mt-1">Core Documents</div>
+                            </div>
+                            <div class="ml-2 w-4 h-4 border-2 border-gray-300 rounded-full peer-checked:border-blue-600 peer-checked:bg-blue-600 flex items-center justify-center">
+                                <div class="w-2 h-2 bg-white rounded-full hidden peer-checked:block"></div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <button
+                    type="submit"
+                    id="generateBtn"
+                    class="w-full bg-blue-600 text-white py-3 px-6 rounded-lg text-sm sm:text-base font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    Generate Documentation
+                </button>
+            </form>
+        </div>
+
+        <!-- Progress Card -->
+        <div id="progress" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-700">Progress</span>
+                <span id="progressText" class="text-sm font-medium text-blue-600">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
+                <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Results Card -->
+        <div id="results" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div class="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 class="text-lg sm:text-xl font-bold text-gray-900">Generated Documents</h2>
+            </div>
+            <div id="resultsContainer" class="space-y-4"></div>
+        </div>
+    </main>
+
+    <!-- Preview Modal (Mobile-friendly) -->
+    <div id="previewModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between p-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">Document Preview</h3>
+                <button id="closePreview" class="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <div id="previewContent" class="markdown-preview p-4 sm:p-6 overflow-y-auto flex-1"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

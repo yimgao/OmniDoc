@@ -25,6 +25,7 @@ dependencies = [
     "requests>=2.31.0",
     "aiohttp>=3.9.0",  # For async HTTP requests (Ollama, etc.)
     "httpx>=0.25.0",  # Alternative async HTTP client
+    "websockets>=12.0",  # For WebSocket support in uvicorn
 ]
 
 [project.optional-dependencies]
