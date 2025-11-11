@@ -1,6 +1,6 @@
 # OmniDoc (DOCU-GEN)
 
-AI-powered documentation generation system that creates comprehensive documentation from simple user ideas using multi-agent collaboration. Uses **Google Gemini** for all agents to ensure high-quality documentation generation.
+AI-powered documentation generation system that creates comprehensive documentation from simple user ideas using multi-agent collaboration. Supports multiple LLM providers (Gemini, Ollama, OpenAI) with configurable per-agent provider selection.
 
 ## 🚀 Quick Start
 
@@ -33,11 +33,21 @@ cp .env.example .env
 **Required Configuration:**
 ```bash
 # In .env file
-GEMINI_API_KEY=your_gemini_api_key_here
 
-# Optional: Use a different Gemini model (default: gemini-2.0-flash)
-GEMINI_DEFAULT_MODEL=gemini-2.0-flash
-# Options: gemini-2.0-flash (recommended), gemini-2.5-flash, gemini-2.5-pro
+# LLM Provider Configuration (choose one)
+LLM_PROVIDER=gemini  # Options: gemini, ollama, openai (default: gemini)
+
+# Gemini Configuration (if LLM_PROVIDER=gemini)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_DEFAULT_MODEL=gemini-2.0-flash  # Optional: gemini-2.5-flash, gemini-2.5-pro
+
+# Ollama Configuration (if LLM_PROVIDER=ollama)
+OLLAMA_BASE_URL=http://localhost:11434  # Optional, defaults to localhost:11434
+OLLAMA_MODEL=dolphin3  # Optional, defaults to first available model
+
+# OpenAI Configuration (if LLM_PROVIDER=openai)
+OPENAI_API_KEY=your_openai_api_key_here
+# Note: Requires installing openai optional dependency: pip install .[openai]
 ```
 
 **Get Your Gemini API Key:**
@@ -71,9 +81,12 @@ uv run python -m src.web.app
   - **Phase 3 (Final Packaging)**: Cross-referencing, quality review, and format conversion
   - **Phase 4 (Code Analysis)**: Optional codebase analysis and documentation updates
 - **LLM Provider**: 
-  - **Google Gemini** (all agents) - High-quality cloud-based LLM
-  - **Default Model**: `gemini-2.0-flash` (balanced quality and speed)
-  - **Configurable**: Support for `gemini-2.5-flash` and `gemini-2.5-pro` via environment variable
+  - **Multiple Providers Supported**: Gemini, Ollama, OpenAI
+  - **Default Provider**: `gemini` (configurable via `LLM_PROVIDER` environment variable)
+  - **Per-Agent Configuration**: Optional per-agent provider configuration for hybrid setups
+  - **Gemini Models**: `gemini-2.0-flash` (default), `gemini-2.5-flash`, `gemini-2.5-pro`
+  - **Ollama**: Local models for fast development and testing
+  - **OpenAI**: GPT-4o-mini, GPT-4o, GPT-3.5-turbo
 - **Format Conversion**: Outputs Markdown, HTML, PDF, DOCX
 - **Quality Assurance**: Automated quality checks with document-type-specific criteria
 - **Parallel Execution**: Async parallel execution with DAG-based dependencies (3x speedup)
@@ -88,13 +101,25 @@ uv run python -m src.web.app
 
 ### LLM Provider Features
 
-- **Gemini Provider** (All Agents):
+- **Gemini Provider** (Default):
   - **Default Model**: `gemini-2.0-flash` (recommended balance of quality and speed)
   - **Alternative Models**: `gemini-2.5-flash` (higher quality), `gemini-2.5-pro` (highest quality)
   - **Rate Limit Handling**: Automatic retry with exponential backoff
   - **Token Limits**: 1M TPM (tokens per minute), 15 RPM (requests per minute), 200 RPD (requests per day) on free tier
   - **High-Quality Output**: Optimized for complex documentation tasks
-  - **Configurable**: Set `GEMINI_DEFAULT_MODEL` environment variable to use a different model
+  - **Configuration**: Set `LLM_PROVIDER=gemini` and `GEMINI_DEFAULT_MODEL` environment variables
+
+- **Ollama Provider** (Local Development):
+  - **Usage**: Set `LLM_PROVIDER=ollama` in `.env` file
+  - **Benefits**: Fast, local, no API costs
+  - **Models**: Any Ollama model (e.g., `dolphin3`, `llama3`, `mistral`)
+  - **Configuration**: Set `OLLAMA_BASE_URL` if using remote Ollama instance
+
+- **OpenAI Provider**:
+  - **Usage**: Set `LLM_PROVIDER=openai` in `.env` file
+  - **Required**: Install optional dependency: `pip install .[openai]` or `uv pip install .[openai]`
+  - **Models**: `gpt-4o-mini` (default), `gpt-4o`, `gpt-3.5-turbo`
+  - **Configuration**: Set `OPENAI_API_KEY` environment variable
 
 ## 🏗️ Project Structure
 
