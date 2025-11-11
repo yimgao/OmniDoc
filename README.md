@@ -88,8 +88,8 @@ uv run python -m src.web.app
   - **Ollama**: Local models for fast development and testing
   - **OpenAI**: GPT-4o-mini, GPT-4o, GPT-3.5-turbo
 - **Format Conversion**: Outputs Markdown, HTML, PDF, DOCX
-- **Quality Assurance**: Automated quality checks with document-type-specific criteria
-- **Parallel Execution**: Async parallel execution with DAG-based dependencies (3x speedup)
+- **Quality Assurance**: Automated quality checks with document-type-specific criteria and structured LLM-as-Judge feedback
+- **Parallel Execution**: Async parallel execution with DAG-based dependencies (Phase 1 and Phase 2, 3x speedup)
 - **Web Interface**: FastAPI web app with real-time progress tracking via WebSocket
 - **Error Handling**: Retry logic with exponential backoff
 - **Document Templates**: Jinja2-based customizable templates
