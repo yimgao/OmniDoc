@@ -44,7 +44,7 @@ class APIDocumentationAgent(BaseAgent):
             **provider_kwargs
         )
         
-        self.file_manager = file_manager or FileManager(base_dir="docs/api")
+        self.file_manager = file_manager or FileManager(base_dir="docs")
     
     def generate(
         self, 
