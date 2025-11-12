@@ -58,7 +58,9 @@ form.addEventListener('submit', async (e) => {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_idea: userIdea, profile: profile})
+            body: JSON.stringify({user_idea: userIdea, profile: profile, phase1_only: true})
+            // body: JSON.stringify({user_idea: userIdea, profile: profile})
+
         });
         
         if (!response.ok) {
