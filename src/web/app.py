@@ -16,6 +16,7 @@ from datetime import datetime
 
 from src.coordination.coordinator import WorkflowCoordinator
 from src.context.context_manager import ContextManager
+from src.context.shared_context import AgentType
 from src.utils.document_organizer import get_documents_summary
 from src.utils.logger import get_logger
 
@@ -1289,6 +1290,151 @@ async def download_all_documents(project_id: str):
     except Exception as e:
         logger.error(f"Error creating ZIP file for project {project_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error creating ZIP file: {str(e)}")
+
+
+class Phase1ApprovalRequest(BaseModel):
+    """Request model for Phase 1 approval"""
+    notes: Optional[str] = None  # Optional approval notes/comments
+
+
+@app.post("/api/approve-phase1/{project_id}")
+async def approve_phase1(project_id: str, request: Optional[Phase1ApprovalRequest] = None):
+    """
+    Approve Phase 1 documents to proceed to Phase 2+
+    
+    This endpoint allows users to review and approve the Phase 1 documents
+    (requirements.md and technical_spec.md) before the workflow continues.
+    """
+    try:
+        # Check if project exists
+        status = context_manager.get_project_status(project_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if Phase 1 is complete
+        if status["status"] != "phase1_complete_awaiting_approval":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Project is not awaiting Phase 1 approval. Current status: {status['status']}"
+            )
+        
+        # Approve Phase 1
+        notes = request.notes if request else None
+        context_manager.approve_phase1(project_id, notes=notes)
+        
+        # Send WebSocket update
+        await websocket_manager.send_progress(project_id, {
+            "type": "phase1_approved",
+            "message": "Phase 1 documents approved - proceeding to Phase 2+",
+            "project_id": project_id
+        })
+        
+        return {
+            "project_id": project_id,
+            "status": "approved",
+            "message": "Phase 1 documents approved. Workflow will proceed to Phase 2+.",
+            "notes": notes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving Phase 1 for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reject-phase1/{project_id}")
+async def reject_phase1(project_id: str, request: Optional[Phase1ApprovalRequest] = None):
+    """
+    Reject Phase 1 documents (stops workflow)
+    
+    This endpoint allows users to reject the Phase 1 documents if they need
+    to make changes or restart the process.
+    """
+    try:
+        # Check if project exists
+        status = context_manager.get_project_status(project_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Check if Phase 1 is complete
+        if status["status"] != "phase1_complete_awaiting_approval":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Project is not awaiting Phase 1 approval. Current status: {status['status']}"
+            )
+        
+        # Reject Phase 1
+        notes = request.notes if request else None
+        context_manager.reject_phase1(project_id, notes=notes)
+        
+        # Send WebSocket update
+        await websocket_manager.send_progress(project_id, {
+            "type": "phase1_rejected",
+            "message": "Phase 1 documents rejected - workflow stopped",
+            "project_id": project_id
+        })
+        
+        return {
+            "project_id": project_id,
+            "status": "rejected",
+            "message": "Phase 1 documents rejected. Workflow has been stopped.",
+            "notes": notes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error rejecting Phase 1 for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/phase1-documents/{project_id}")
+async def get_phase1_documents(project_id: str):
+    """
+    Get Phase 1 documents for review
+    
+    Returns the requirements.md and technical_spec.md documents
+    that were generated in Phase 1, ready for user review.
+    """
+    try:
+        status = context_manager.get_project_status(project_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get Phase 1 documents from agent outputs
+        requirements_output = context_manager.get_agent_output(project_id, AgentType.REQUIREMENTS_ANALYST)
+        technical_output = context_manager.get_agent_output(project_id, AgentType.TECHNICAL_DOCUMENTATION)
+        
+        documents = {}
+        
+        if requirements_output:
+            documents["requirements"] = {
+                "content": requirements_output.content,
+                "file_path": requirements_output.file_path,
+                "quality_score": requirements_output.quality_score,
+                "generated_at": requirements_output.generated_at.isoformat() if requirements_output.generated_at else None
+            }
+        
+        if technical_output:
+            documents["technical_spec"] = {
+                "content": technical_output.content,
+                "file_path": technical_output.file_path,
+                "quality_score": technical_output.quality_score,
+                "generated_at": technical_output.generated_at.isoformat() if technical_output.generated_at else None
+            }
+        
+        return {
+            "project_id": project_id,
+            "status": status["status"],
+            "phase1_approved": status.get("phase1_approved", 0),
+            "phase1_approved_at": status.get("phase1_approved_at"),
+            "phase1_approval_notes": status.get("phase1_approval_notes"),
+            "documents": documents
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting Phase 1 documents for project {project_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/download/{project_id}/{doc_type}")

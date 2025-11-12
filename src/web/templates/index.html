@@ -232,6 +232,65 @@
             </div>
         </div>
 
+        <!-- Phase 1 Review & Approval Card -->
+        <div id="phase1Review" class="hidden bg-white rounded-xl shadow-sm border-2 border-yellow-300 p-4 sm:p-6 mb-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
+                    <span class="text-yellow-600 text-xl">📋</span>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-gray-900">Phase 1: Core Foundation Documents</h3>
+                    <p class="text-sm text-gray-600">Please review and approve to proceed</p>
+                </div>
+            </div>
+            
+            <div class="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p class="text-sm text-gray-700 mb-2">
+                    <strong>Phase 1 Complete!</strong> The following core documents have been generated:
+                </p>
+                <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    <li><strong>requirements.md</strong> - Project requirements and specifications</li>
+                    <li><strong>technical_spec.md</strong> - Technical architecture and design</li>
+                </ul>
+                <p class="text-sm text-gray-600 mt-3">
+                    Review the documents below and approve to continue with Phase 2+ (Technical Implementation, Development, User Support, and Business documents).
+                </p>
+            </div>
+
+            <div id="phase1Documents" class="space-y-4 mb-4">
+                <!-- Documents will be loaded here -->
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button
+                    id="approvePhase1Btn"
+                    onclick="approvePhase1()"
+                    class="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg text-sm sm:text-base font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    ✅ Approve & Continue
+                </button>
+                <button
+                    id="rejectPhase1Btn"
+                    onclick="rejectPhase1()"
+                    class="flex-1 bg-red-600 text-white py-3 px-6 rounded-lg text-sm sm:text-base font-semibold hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                    ❌ Reject & Stop
+                </button>
+            </div>
+
+            <div id="approvalNotes" class="mt-4 hidden">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    Notes (optional)
+                </label>
+                <textarea
+                    id="approvalNotesText"
+                    rows="3"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                    placeholder="Add any comments or notes about your approval decision..."
+                ></textarea>
+            </div>
+        </div>
+
         <!-- Results Card -->
         <div id="results" class="hidden bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
             <div class="flex items-center justify-between mb-4 sm:mb-6">

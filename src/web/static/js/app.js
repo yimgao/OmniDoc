@@ -58,8 +58,8 @@ form.addEventListener('submit', async (e) => {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_idea: userIdea, profile: profile, phase1_only: true})
-            // body: JSON.stringify({user_idea: userIdea, profile: profile})
+            body: JSON.stringify({user_idea: userIdea, profile: profile})
+            // Note: phase1_only removed - workflow now pauses after Phase 1 for approval
 
         });
         
@@ -163,6 +163,27 @@ function handleWebSocketMessage(message) {
                 showStatus(message.message, 'info');
             }
             break;
+        case 'phase_1':
+            // Phase 1 complete - show review UI
+            if (message.task_id === 'all' && message.status === 'complete') {
+                showPhase1Review();
+            }
+            break;
+        case 'phase1_approved':
+            // Phase 1 approved - hide review UI and continue
+            hidePhase1Review();
+            showStatus('Phase 1 approved! Continuing with Phase 2+...', 'success');
+            updateProgress(30);
+            break;
+        case 'phase1_rejected':
+            // Phase 1 rejected - hide review UI and show error
+            hidePhase1Review();
+            showStatus('Phase 1 rejected. Workflow stopped.', 'error');
+            generateBtn.disabled = false;
+            generateBtn.textContent = 'Generate Documentation';
+            generateBtn.classList.remove('loading');
+            progressDiv.classList.add('hidden');
+            break;
         case 'complete':
             updateProgress(100);
             showStatus('Documentation generated successfully!', 'success');
@@ -170,6 +191,7 @@ function handleWebSocketMessage(message) {
             generateBtn.textContent = 'Generate Documentation';
             generateBtn.classList.remove('loading');
             progressDiv.classList.add('hidden');
+            hidePhase1Review(); // Hide Phase 1 review if still visible
             if (websocket) {
                 websocket.close();
                 websocket = null;

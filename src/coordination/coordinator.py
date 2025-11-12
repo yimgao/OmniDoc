@@ -47,6 +47,7 @@ from src.coordination.workflow_dag import (
     get_phase2_tasks_for_profile,
     get_tasks_for_phases,
     get_tasks_for_phase,
+    WorkflowTask,
     get_available_phases,
     build_phase1_task_dependencies,
     build_task_dependencies,
@@ -1921,28 +1922,156 @@ Improvement Suggestions:
                 )
                 logger.debug(f"  📝 Added Phase 1 async task: {task.task_id} (depends on: {dep_task_ids}, quality_threshold: {task.quality_threshold})")
             
-            # Execute Phase 1 tasks asynchronously with dependency resolution (native async)
-            logger.info("🚀 Executing Phase 1 tasks in parallel (respecting dependencies)...")
+            # Execute Phase 1 tasks SEQUENTIALLY with per-document approval
+            # Each document is generated, checked for quality, and then waits for user approval
+            logger.info("🚀 Executing Phase 1 tasks SEQUENTIALLY (with per-document approval)...")
             
-            # Create progress callback wrapper for Phase 1
-            async def phase1_progress_callback(completed_count: int, total_count: int, task_id: str):
-                """Wrapper to convert executor callback to our format"""
+            # Sort tasks by dependencies to ensure correct execution order
+            def get_task_order(tasks: List) -> List:
+                """Sort tasks by dependency order (topological sort)"""
+                ordered = []
+                visited = set()
+                
+                def visit(task):
+                    if task.task_id in visited:
+                        return
+                    visited.add(task.task_id)
+                    # Visit dependencies first
+                    for dep_type in task.dependencies:
+                        # Find dependent task
+                        for t in tasks:
+                            if t.agent_type == dep_type:
+                                visit(t)
+                                break
+                    ordered.append(task)
+                
+                for task in tasks:
+                    visit(task)
+                return ordered
+            
+            ordered_phase1_tasks = get_task_order(phase1_tasks)
+            phase1_task_results = {}
+            
+            # Execute each task sequentially and wait for approval
+            for task in ordered_phase1_tasks:
+                logger.info(f"📝 Generating {task.task_id}...")
+                
+                # Get dependencies from context
+                deps_content: Dict[AgentType, str] = {}
+                for dep_type in task.dependencies:
+                    loop = asyncio.get_event_loop()
+                    dep_output = await loop.run_in_executor(
+                        None,
+                        lambda dt=dep_type: self.context_manager.get_agent_output(project_id, dt)
+                    )
+                    if dep_output:
+                        deps_content[dep_type] = dep_output.content
+                
+                # Build kwargs
+                kwargs = build_kwargs_for_phase1_task(
+                    task=task,
+                    user_idea=user_idea,
+                    project_id=project_id,
+                    context_manager=self.context_manager,
+                    deps_content=deps_content,
+                    code_analysis_summary=code_analysis_summary
+                )
+                
+                # Get agent instance
+                agent = get_agent_for_phase1_task(self, task.agent_type)
+                if not agent:
+                    raise ValueError(f"Agent not found for {task.agent_type.value}")
+                
+                agent._current_phase_number = 1
+                
+                # Execute with quality gate (async version)
+                logger.info(f"🔍 Executing {task.task_id} with quality gate (threshold: {task.quality_threshold})...")
+                file_path, content = await self._async_run_agent_with_quality_loop(
+                    agent_instance=agent,
+                    agent_type=task.agent_type,
+                    generate_kwargs=kwargs,
+                    output_filename=None,
+                    project_id=None,
+                    quality_threshold=task.quality_threshold
+                )
+                
+                # Store result
+                phase1_task_results[task.task_id] = (file_path, content)
+                
+                # Map task_id to document display name
+                doc_name_map = {
+                    "requirements": "Requirements",
+                    "technical_doc": "Technical Specification",
+                }
+                doc_name = doc_name_map.get(task.task_id, task.task_id.replace("_", " ").title())
+                
+                # Send progress update
                 if progress_callback:
-                    # Find the task to get its agent_type for display name
-                    task = next((t for t in phase1_tasks if t.task_id == task_id), None)
-                    if task:
-                        # Map task_id to document display name
-                        doc_name_map = {
-                            "requirements": "Requirements",
-                            "project_charter": "Project Charter",
-                            "user_stories": "User Stories",
-                            "business_model": "Business Model",
-                            "marketing_plan": "Marketing Plan",
-                        }
-                        doc_name = doc_name_map.get(task_id, task_id.replace("_", " ").title())
-                        await progress_callback("phase_1", doc_name, "complete")
-            
-            phase1_task_results = await executor.execute(progress_callback=phase1_progress_callback)
+                    await progress_callback("phase_1", doc_name, "complete")
+                
+                # Update status to indicate this document is ready for review
+                doc_type_map = {
+                    AgentType.REQUIREMENTS_ANALYST: "requirements",
+                    AgentType.TECHNICAL_DOCUMENTATION: "technical_documentation",
+                }
+                doc_type = doc_type_map.get(task.agent_type, task.agent_type.value)
+                
+                # Update status for this specific document
+                self.context_manager.update_project_status(
+                    project_id=project_id,
+                    status=f"phase1_document_ready:{doc_type}",
+                    completed_agents=[doc_type],
+                    results=results
+                )
+                
+                # Wait for user approval of this specific document
+                logger.info(f"⏸️  {doc_name} generated and ready for review (quality score >= {task.quality_threshold})")
+                logger.info(f"⏳ Waiting for user approval of {doc_name}...")
+                
+                # Poll for approval of this specific document
+                max_wait_time = 3600  # 1 hour timeout
+                check_interval = 2  # Check every 2 seconds
+                waited_time = 0
+                
+                while waited_time < max_wait_time:
+                    approval_status = self.context_manager.is_document_approved(project_id, task.agent_type)
+                    
+                    if approval_status is True:
+                        logger.info(f"✅ {doc_name} APPROVED by user - continuing...")
+                        break
+                    elif approval_status is False:
+                        logger.info(f"❌ {doc_name} REJECTED by user - stopping workflow")
+                        results["status"][doc_type] = "rejected"
+                        results["error"] = f"{doc_name} was rejected by user"
+                        self.context_manager.update_project_status(
+                            project_id=project_id,
+                            status=f"phase1_document_rejected:{doc_type}",
+                            results=results
+                        )
+                        return results
+                    else:
+                        # Still pending, wait and check again
+                        await asyncio.sleep(check_interval)
+                        waited_time += check_interval
+                        
+                        # Send periodic WebSocket updates
+                        if progress_callback and waited_time % 10 == 0:
+                            await progress_callback("phase_1", doc_name, "awaiting_approval")
+                
+                # Check if we timed out
+                if waited_time >= max_wait_time:
+                    logger.warning(f"⏰ Approval timeout for {doc_name} after {max_wait_time} seconds")
+                    results["status"][doc_type] = "approval_timeout"
+                    results["error"] = f"{doc_name} approval timeout after {max_wait_time} seconds"
+                    self.context_manager.update_project_status(
+                        project_id=project_id,
+                        status=f"phase1_document_timeout:{doc_type}",
+                        results=results
+                    )
+                    return results
+                
+                # Document approved, continue to next
+                logger.info(f"✅ {doc_name} approved - proceeding to next document...")
             
             # Process Phase 1 results and update results dictionary
             req_content = None
@@ -2017,6 +2146,75 @@ Improvement Suggestions:
             
             logger.info("=" * 80)
             logger.info("✅ PHASE 1 COMPLETE: Foundational documents generated with quality gates (DAG)")
+            logger.info("=" * 80)
+            
+            # Update status to indicate Phase 1 is complete and awaiting approval
+            self.context_manager.update_project_status(
+                project_id=project_id,
+                status="phase1_complete_awaiting_approval",
+                completed_agents=list(results.get("files", {}).keys()),
+                results=results
+            )
+            
+            # Send WebSocket update for Phase 1 completion
+            if progress_callback:
+                await progress_callback("phase_1", "all", "complete")
+            
+            # Check if Phase 1 is approved (wait for approval if not)
+            logger.info("=" * 80)
+            logger.info("⏸️  PHASE 1 AWAITING USER APPROVAL")
+            logger.info("=" * 80)
+            logger.info("📋 Phase 1 documents generated:")
+            logger.info("   - requirements.md")
+            logger.info("   - technical_spec.md")
+            logger.info("")
+            logger.info("⏳ Waiting for user approval to proceed to Phase 2...")
+            logger.info("   (Use API endpoint /api/approve-phase1/{project_id} to approve)")
+            
+            # Poll for approval (with timeout)
+            max_wait_time = 3600  # 1 hour timeout
+            check_interval = 2  # Check every 2 seconds
+            waited_time = 0
+            
+            while waited_time < max_wait_time:
+                approval_status = self.context_manager.is_phase1_approved(project_id)
+                
+                if approval_status is True:
+                    logger.info("✅ Phase 1 APPROVED by user - proceeding to Phase 2+")
+                    break
+                elif approval_status is False:
+                    logger.info("❌ Phase 1 REJECTED by user - stopping workflow")
+                    results["status"]["phase1_approval"] = "rejected"
+                    results["error"] = "Phase 1 documents were rejected by user"
+                    self.context_manager.update_project_status(
+                        project_id=project_id,
+                        status="phase1_rejected",
+                        results=results
+                    )
+                    return results
+                else:
+                    # Still pending, wait and check again
+                    await asyncio.sleep(check_interval)
+                    waited_time += check_interval
+                    
+                    # Send periodic WebSocket updates
+                    if progress_callback and waited_time % 10 == 0:  # Every 10 seconds
+                        await progress_callback("phase_1", "approval", "pending")
+            
+            # Check if we timed out
+            if waited_time >= max_wait_time:
+                logger.warning(f"⏰ Approval timeout after {max_wait_time} seconds - stopping workflow")
+                results["status"]["phase1_approval"] = "timeout"
+                results["error"] = f"Phase 1 approval timeout after {max_wait_time} seconds"
+                self.context_manager.update_project_status(
+                    project_id=project_id,
+                    status="phase1_approval_timeout",
+                    results=results
+                )
+                return results
+            
+            logger.info("=" * 80)
+            logger.info("🚀 PROCEEDING TO PHASE 2+ (Phase 1 approved)")
             logger.info("=" * 80)
             
             # Check if we should skip Phase 2

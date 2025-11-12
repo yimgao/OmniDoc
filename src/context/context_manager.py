@@ -81,6 +81,10 @@ class ContextManager:
                 status TEXT NOT NULL,
                 dependencies TEXT,  -- JSON array
                 generated_at TEXT,
+                version INTEGER DEFAULT 1,  -- Document version (1, 2, 3, etc.)
+                approved INTEGER DEFAULT 0,  -- 0 = pending, 1 = approved, 2 = rejected
+                approved_at TEXT,  -- Timestamp when approved
+                approval_notes TEXT,  -- User notes during approval
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             )
         """)
@@ -112,6 +116,9 @@ class ContextManager:
                 error TEXT,
                 completed_agents TEXT,  -- JSON array
                 results TEXT,  -- JSON object (serialized results)
+                phase1_approved INTEGER DEFAULT 0,  -- 0 = pending, 1 = approved, 2 = rejected
+                phase1_approved_at TEXT,  -- Timestamp when Phase 1 was approved
+                phase1_approval_notes TEXT,  -- User notes/comments during approval
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             )
         """)
@@ -449,8 +456,8 @@ class ContextManager:
                     cursor.execute("""
                         INSERT INTO project_status (
                             project_id, status, user_idea, profile, provider_name,
-                            started_at, completed_agents, results, error
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            started_at, completed_agents, results, error, phase1_approved
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         project_id,
                         status,
@@ -460,7 +467,8 @@ class ContextManager:
                         now,
                         json.dumps(completed_agents or []),
                         json.dumps(results or {}),
-                        error
+                        error,
+                        0  # Default: pending approval
                     ))
                 
                 self.connection.commit()
@@ -498,8 +506,290 @@ class ContextManager:
             "failed_at": row["failed_at"],
             "error": row["error"],
             "completed_agents": json.loads(row["completed_agents"] or "[]"),
-            "results": json.loads(row["results"] or "{}") if row["results"] else {}
+            "results": json.loads(row["results"] or "{}") if row["results"] else {},
+            "phase1_approved": row.get("phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
+            "phase1_approved_at": row.get("phase1_approved_at"),
+            "phase1_approval_notes": row.get("phase1_approval_notes")
         }
+    
+    def approve_phase1(self, project_id: str, notes: Optional[str] = None) -> bool:
+        """
+        Approve Phase 1 documents to proceed to Phase 2+
+        
+        Args:
+            project_id: Project identifier
+            notes: Optional approval notes/comments
+            
+        Returns:
+            True if approval was successful
+        """
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                now = datetime.now().isoformat()
+                
+                cursor.execute("""
+                    UPDATE project_status 
+                    SET phase1_approved = ?, phase1_approved_at = ?, phase1_approval_notes = ?
+                    WHERE project_id = ?
+                """, (1, now, notes, project_id))
+                
+                self.connection.commit()
+                return True
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error approving Phase 1 for {project_id}: {e}", exc_info=True)
+                raise
+    
+    def reject_phase1(self, project_id: str, notes: Optional[str] = None) -> bool:
+        """
+        Reject Phase 1 documents (workflow stops)
+        
+        Args:
+            project_id: Project identifier
+            notes: Optional rejection notes/comments
+            
+        Returns:
+            True if rejection was successful
+        """
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                now = datetime.now().isoformat()
+                
+                cursor.execute("""
+                    UPDATE project_status 
+                    SET phase1_approved = ?, phase1_approved_at = ?, phase1_approval_notes = ?, status = ?
+                    WHERE project_id = ?
+                """, (2, now, notes, "phase1_rejected", project_id))
+                
+                self.connection.commit()
+                return True
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error rejecting Phase 1 for {project_id}: {e}", exc_info=True)
+                raise
+    
+    def is_phase1_approved(self, project_id: str) -> Optional[bool]:
+        """
+        Check if Phase 1 is approved
+        
+        Args:
+            project_id: Project identifier
+            
+        Returns:
+            True if approved, False if rejected, None if pending
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("SELECT phase1_approved FROM project_status WHERE project_id = ?", (project_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return None
+        
+        approved = row["phase1_approved"]
+        if approved == 1:
+            return True
+        elif approved == 2:
+            return False
+        else:
+            return None  # Pending
+    
+    def approve_document(self, project_id: str, agent_type: AgentType, notes: Optional[str] = None) -> bool:
+        """
+        Approve a specific document to proceed
+        
+        Args:
+            project_id: Project identifier
+            agent_type: AgentType of the document to approve
+            notes: Optional approval notes/comments
+            
+        Returns:
+            True if approval was successful
+        """
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                now = datetime.now().isoformat()
+                output_id = f"{project_id}_{agent_type.value}"
+                
+                # Update the latest version of the document
+                cursor.execute("""
+                    UPDATE agent_outputs 
+                    SET approved = ?, approved_at = ?, approval_notes = ?
+                    WHERE project_id = ? AND agent_type = ? AND version = (
+                        SELECT MAX(version) FROM agent_outputs 
+                        WHERE project_id = ? AND agent_type = ?
+                    )
+                """, (1, now, notes, project_id, agent_type.value, project_id, agent_type.value))
+                
+                self.connection.commit()
+                return True
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error approving document {agent_type.value} for {project_id}: {e}", exc_info=True)
+                raise
+    
+    def reject_document(self, project_id: str, agent_type: AgentType, notes: Optional[str] = None) -> bool:
+        """
+        Reject a specific document (workflow stops)
+        
+        Args:
+            project_id: Project identifier
+            agent_type: AgentType of the document to reject
+            notes: Optional rejection notes/comments
+            
+        Returns:
+            True if rejection was successful
+        """
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                now = datetime.now().isoformat()
+                output_id = f"{project_id}_{agent_type.value}"
+                
+                # Update the latest version of the document
+                cursor.execute("""
+                    UPDATE agent_outputs 
+                    SET approved = ?, approved_at = ?, approval_notes = ?
+                    WHERE project_id = ? AND agent_type = ? AND version = (
+                        SELECT MAX(version) FROM agent_outputs 
+                        WHERE project_id = ? AND agent_type = ?
+                    )
+                """, (2, now, notes, project_id, agent_type.value, project_id, agent_type.value))
+                
+                self.connection.commit()
+                return True
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error rejecting document {agent_type.value} for {project_id}: {e}", exc_info=True)
+                raise
+    
+    def is_document_approved(self, project_id: str, agent_type: AgentType) -> Optional[bool]:
+        """
+        Check if a specific document is approved (checks latest version)
+        
+        Args:
+            project_id: Project identifier
+            agent_type: AgentType of the document to check
+            
+        Returns:
+            True if approved, False if rejected, None if pending
+        """
+        cursor = self.connection.cursor()
+        # Get the latest version of the document
+        cursor.execute("""
+            SELECT approved FROM agent_outputs 
+            WHERE project_id = ? AND agent_type = ?
+            ORDER BY version DESC LIMIT 1
+        """, (project_id, agent_type.value))
+        row = cursor.fetchone()
+        
+        if not row:
+            return None  # Document not generated yet
+        
+        approved = row["approved"]
+        if approved == 1:
+            return True
+        elif approved == 2:
+            return False
+        else:
+            return None  # Pending
+    
+    def get_document_version(self, project_id: str, agent_type: AgentType) -> int:
+        """
+        Get the current version number of a document
+        
+        Args:
+            project_id: Project identifier
+            agent_type: AgentType of the document
+            
+        Returns:
+            Version number (default: 1)
+        """
+        cursor = self.connection.cursor()
+        cursor.execute("""
+            SELECT version FROM agent_outputs 
+            WHERE project_id = ? AND agent_type = ?
+            ORDER BY version DESC LIMIT 1
+        """, (project_id, agent_type.value))
+        row = cursor.fetchone()
+        
+        if not row:
+            return 1
+        
+        return row["version"] or 1
+    
+    def save_document_version(
+        self,
+        project_id: str,
+        agent_type: AgentType,
+        content: str,
+        file_path: str,
+        quality_score: Optional[float] = None,
+        version: Optional[int] = None
+    ) -> int:
+        """
+        Save a new version of a document
+        
+        Args:
+            project_id: Project identifier
+            agent_type: AgentType of the document
+            content: Document content
+            file_path: File path
+            quality_score: Quality score
+            version: Version number (auto-incremented if None)
+            
+        Returns:
+            Version number that was saved
+        """
+        with self._lock:
+            try:
+                cursor = self.connection.cursor()
+                
+                # Get next version number
+                if version is None:
+                    current_version = self.get_document_version(project_id, agent_type)
+                    version = current_version + 1
+                
+                output_id = f"{project_id}_{agent_type.value}_v{version}"
+                now = datetime.now().isoformat()
+                
+                # Get document type from agent type
+                document_type = agent_type.value.replace("_", " ").title()
+                
+                cursor.execute("""
+                    INSERT INTO agent_outputs (
+                        output_id, project_id, agent_type, document_type,
+                        content, file_path, quality_score, status,
+                        dependencies, generated_at, version, approved
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    output_id,
+                    project_id,
+                    agent_type.value,
+                    document_type,
+                    content,
+                    file_path,
+                    quality_score,
+                    DocumentStatus.COMPLETE.value,
+                    json.dumps([]),
+                    now,
+                    version,
+                    0  # Pending approval
+                ))
+                
+                self.connection.commit()
+                return version
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error saving document version for {project_id}/{agent_type.value}: {e}", exc_info=True)
+                raise
     
     def close(self):
         """Close database connection"""
