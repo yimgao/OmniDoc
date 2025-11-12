@@ -4,9 +4,11 @@ Replaces truncation with intelligent LLM-based summarization
 """
 from typing import Optional
 from src.llm.base_provider import BaseLLMProvider
-from src.llm.provider_factory import ProviderFactory
 from src.utils.logger import get_logger
 from src.config.settings import get_settings
+
+# Lazy import to avoid circular dependency
+# ProviderFactory is imported inside functions where it's used
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,9 @@ class DocumentSummarizer:
                               (defaults to MAX_SUMMARY_LENGTH env var or 3000)
         """
         import os
+        # Lazy import to avoid circular dependency
+        from src.llm.provider_factory import ProviderFactory
+        
         settings = get_settings()
         self.llm_provider = llm_provider or ProviderFactory.create(
             provider_name=provider_name or settings.default_llm_provider
