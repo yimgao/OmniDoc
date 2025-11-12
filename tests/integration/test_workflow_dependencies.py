@@ -1,6 +1,8 @@
 """
 Integration Tests: Workflow Dependencies and Phase Structure
-Tests the improved workflow with database_schema in Phase 1
+Tests the improved workflow with:
+- technical_doc and database_schema in Phase 2 for parallel execution
+- business_model and marketing_plan in Phase 1 for quick decision-making
 """
 import pytest
 from src.coordination.workflow_dag import (
@@ -16,20 +18,20 @@ from src.context.shared_context import AgentType
 class TestWorkflowDependencies:
     """Test workflow dependency structure after improvements"""
     
-    def test_database_schema_not_in_phase2(self):
-        """Test that database_schema is NOT in Phase 2 tasks"""
+    def test_database_schema_in_phase2(self):
+        """Test that database_schema IS in Phase 2 tasks (moved from Phase 1 for parallel execution)"""
         team_tasks = get_phase2_tasks_for_profile(profile="team")
         individual_tasks = get_phase2_tasks_for_profile(profile="individual")
         
-        # Database schema should NOT be in Phase 2
+        # Database schema should BE in Phase 2 (moved for parallel execution)
         team_task_types = [task.agent_type for task in team_tasks]
         individual_task_types = [task.agent_type for task in individual_tasks]
         
-        assert AgentType.DATABASE_SCHEMA not in team_task_types
-        assert AgentType.DATABASE_SCHEMA not in individual_task_types
+        assert AgentType.DATABASE_SCHEMA in team_task_types
+        assert AgentType.DATABASE_SCHEMA in individual_task_types
         
-        # Verify db_schema is not in PHASE2_TASKS_CONFIG
-        assert "db_schema" not in PHASE2_TASKS_CONFIG
+        # Verify database_schema is in PHASE2_TASKS_CONFIG
+        assert "database_schema" in PHASE2_TASKS_CONFIG
     
     def test_api_doc_depends_on_database_schema(self):
         """Test that api_doc depends on database_schema"""
@@ -77,21 +79,25 @@ class TestWorkflowDependencies:
         dev_doc_deps = dependency_map.get("dev_doc", [])
         assert "api_doc" in dev_doc_deps
     
-    def test_database_schema_in_phase1_agent_types(self):
-        """Test that DATABASE_SCHEMA is listed as Phase 1 agent type"""
+    def test_database_schema_in_phase2_agent_types(self):
+        """Test that DATABASE_SCHEMA is now in Phase 2 (moved from Phase 1 for parallel execution)"""
         from src.coordination.workflow_dag import build_task_dependencies
         from src.coordination.workflow_dag import get_phase2_tasks_for_profile
         
         team_tasks = get_phase2_tasks_for_profile(profile="team")
         
-        # This test verifies that build_task_dependencies knows about DATABASE_SCHEMA as Phase 1
-        # by checking the implementation (DATABASE_SCHEMA should be in phase1_agent_types list)
-        # We can't directly test this, but we can verify the behavior:
-        # Tasks that depend on DATABASE_SCHEMA should work correctly
+        # Verify database_schema is now a Phase 2 task
+        team_task_types = [task.agent_type for task in team_tasks]
+        assert AgentType.DATABASE_SCHEMA in team_task_types
         
-        # Verify api_doc depends on DATABASE_SCHEMA (even though it's Phase 1)
+        # Verify api_doc depends on DATABASE_SCHEMA (which is now in Phase 2)
         api_doc_task = PHASE2_TASKS_CONFIG.get("api_doc")
         assert AgentType.DATABASE_SCHEMA in api_doc_task.dependencies
+        
+        # Verify database_schema task exists in Phase 2
+        database_schema_task = PHASE2_TASKS_CONFIG.get("database_schema")
+        assert database_schema_task is not None
+        assert database_schema_task.agent_type == AgentType.DATABASE_SCHEMA
     
     def test_kwargs_builder_with_db_schema(self):
         """Test that with_db_schema kwargs_builder exists and works"""
@@ -179,21 +185,23 @@ class TestWorkflowDependencies:
         assert kwargs["technical_summary"] == technical_summary
     
     def test_phase2_task_count(self):
-        """Test that Phase 2 has correct number of tasks"""
+        """Test that Phase 2+ has correct number of tasks"""
         team_tasks = get_phase2_tasks_for_profile(profile="team")
         individual_tasks = get_phase2_tasks_for_profile(profile="individual")
         
-        # Team should have more tasks than individual
-        assert len(team_tasks) > len(individual_tasks)
+        # Team should have more tasks than individual (team has pm_doc and stakeholder_doc)
+        assert len(team_tasks) >= len(individual_tasks)
         
-        # Team should have: api_doc, setup_guide, dev_doc, test_doc, user_doc, legal_doc, support_playbook
-        #                  pm_doc, stakeholder_doc, business_model, marketing_plan
-        # Total: 11 tasks
+        # Team should have: technical_doc, database_schema, api_doc, setup_guide, dev_doc, test_doc, 
+        #                  user_doc, legal_doc, support_playbook, pm_doc, stakeholder_doc
+        # Note: business_model and marketing_plan have been moved to Phase 1 for quick decision-making
+        # Total: 11 tasks (Phase 2, 3, 4 combined)
         assert len(team_tasks) == 11
         
-        # Individual should have: api_doc, setup_guide, dev_doc, test_doc, user_doc, legal_doc, support_playbook
-        # Total: 7 tasks
-        assert len(individual_tasks) == 7
+        # Individual should have: technical_doc, database_schema, api_doc, setup_guide, dev_doc, 
+        #                         test_doc, user_doc, legal_doc, support_playbook
+        # Total: 9 tasks (Phase 2, 3, 4 combined, no team-only tasks)
+        assert len(individual_tasks) == 9
     
     def test_all_phase2_tasks_have_valid_agent_types(self):
         """Test that all Phase 2 tasks have valid agent types"""
