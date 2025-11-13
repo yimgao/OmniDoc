@@ -18,6 +18,7 @@ class AgentType(str, Enum):
     # Level 2: Product (Product Manager)
     PM_DOCUMENTATION = "pm_documentation"
     USER_STORIES = "user_stories"
+    WBS_AGENT = "wbs_agent"  # Work Breakdown Structure
     
     # Level 3: Technical (Programmer)
     TECHNICAL_DOCUMENTATION = "technical_documentation"
@@ -117,6 +118,10 @@ class SharedContext:
             "project_overview": self.requirements.project_overview,
             "core_features": self.requirements.core_features,
             "technical_requirements": self.requirements.technical_requirements,
+            "user_personas": self.requirements.user_personas,
+            "business_objectives": self.requirements.business_objectives,
+            "constraints": self.requirements.constraints,
+            "assumptions": self.requirements.assumptions,
         }
     
     def get_agent_output(self, agent_type: AgentType) -> Optional[AgentOutput]:

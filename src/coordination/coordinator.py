@@ -36,6 +36,7 @@ from src.agents.support_playbook_agent import SupportPlaybookAgent
 from src.agents.legal_compliance_agent import LegalComplianceAgent
 from src.agents.document_improver_agent import DocumentImproverAgent
 from src.agents.code_analyst_agent import CodeAnalystAgent
+from src.agents.wbs_agent import WBSAgent
 from src.utils.file_manager import FileManager
 from src.utils.cross_referencer import CrossReferencer
 from src.utils.parallel_executor import ParallelExecutor, TaskStatus
@@ -79,7 +80,22 @@ AGENT_TYPE_TO_FOLDER = {
     AgentType.STAKEHOLDER_COMMUNICATION: "stakeholder",
     AgentType.BUSINESS_MODEL: "business",
     AgentType.MARKETING_PLAN: "marketing",
+    AgentType.WBS_AGENT: "pm",
     AgentType.QUALITY_REVIEWER: "quality",
+}
+
+# Mapping from AgentType to doc_type for results storage (Phase 1)
+AGENT_TYPE_TO_DOC_TYPE_PHASE1 = {
+    AgentType.REQUIREMENTS_ANALYST: "requirements",
+    AgentType.PROJECT_CHARTER: "project_charter",
+    AgentType.USER_STORIES: "user_stories",
+    AgentType.BUSINESS_MODEL: "business_model",
+    AgentType.MARKETING_PLAN: "marketing_plan",
+    AgentType.PM_DOCUMENTATION: "pm_documentation",
+    AgentType.STAKEHOLDER_COMMUNICATION: "stakeholder_communication",
+    AgentType.WBS_AGENT: "wbs_agent",
+    AgentType.TECHNICAL_DOCUMENTATION: "technical_documentation",
+    AgentType.DATABASE_SCHEMA: "database_schema",
 }
 
 
@@ -205,6 +221,10 @@ class WorkflowCoordinator:
         self.stakeholder_agent = StakeholderCommunicationAgent(
             rate_limiter=self.rate_limiter,
             provider_name=get_agent_provider("stakeholder_agent")
+        )
+        self.wbs_agent = WBSAgent(
+            rate_limiter=self.rate_limiter,
+            provider_name=get_agent_provider("wbs_agent")
         )
         self.user_agent = UserDocumentationAgent(
             rate_limiter=self.rate_limiter,
@@ -1008,41 +1028,32 @@ Improvement Suggestions:
                         logger.warning(f"Unexpected result format for {task.task_id}: {type(task_result)}")
                         continue
                     
-                    # Update results dictionary
-                    if task.agent_type == AgentType.REQUIREMENTS_ANALYST:
-                        results["files"]["requirements"] = file_path
-                        results["status"]["requirements"] = "complete_v2"
-                        req_content = content
-                    elif task.agent_type == AgentType.PROJECT_CHARTER:
-                        results["files"]["project_charter"] = file_path
-                        results["status"]["project_charter"] = "complete_v2"
-                        charter_content = content
-                    elif task.agent_type == AgentType.USER_STORIES:
-                        results["files"]["user_stories"] = file_path
-                        results["status"]["user_stories"] = "complete_v2"
-                        stories_content = content
-                    elif task.agent_type == AgentType.TECHNICAL_DOCUMENTATION:
-                        results["files"]["technical_documentation"] = file_path
-                        results["status"]["technical_documentation"] = "complete_v2"
-                        tech_content = content
-                    elif task.agent_type == AgentType.DATABASE_SCHEMA:
-                        results["files"]["database_schema"] = file_path
-                        results["status"]["database_schema"] = "complete_v2"
-                        db_content = content
+                    # Map agent_type to doc_type for results storage
+                    doc_type = AGENT_TYPE_TO_DOC_TYPE_PHASE1.get(task.agent_type, task.agent_type.value)
                     
+                    # Update results dictionary
+                    results["files"][doc_type] = file_path
+                    results["status"][doc_type] = "complete_v2"
+                    
+                    # Store content for later use
                     final_docs[task.agent_type] = content
                     document_file_paths[task.agent_type] = file_path
+                    
+                    # Keep track of specific documents for validation
+                    if task.agent_type == AgentType.REQUIREMENTS_ANALYST:
+                        req_content = content
+                    elif task.agent_type == AgentType.PROJECT_CHARTER:
+                        charter_content = content
+                    elif task.agent_type == AgentType.USER_STORIES:
+                        stories_content = content
+                    elif task.agent_type == AgentType.TECHNICAL_DOCUMENTATION:
+                        tech_content = content
+                    elif task.agent_type == AgentType.DATABASE_SCHEMA:
+                        db_content = content
                 else:
                     logger.error(f"❌ Phase 1 task {task.task_id} failed or returned no result")
                     # Mark as failed in status
-                    doc_type_map = {
-                        AgentType.REQUIREMENTS_ANALYST: "requirements",
-                        AgentType.PROJECT_CHARTER: "project_charter",
-                        AgentType.USER_STORIES: "user_stories",
-                        AgentType.TECHNICAL_DOCUMENTATION: "technical_documentation",
-                        AgentType.DATABASE_SCHEMA: "database_schema",
-                    }
-                    doc_type = doc_type_map.get(task.agent_type, task.agent_type.value)
+                    doc_type = AGENT_TYPE_TO_DOC_TYPE_PHASE1.get(task.agent_type, task.agent_type.value)
                     results["status"][doc_type] = "failed"
             
             # Verify requirements were generated
@@ -1971,17 +1982,9 @@ Improvement Suggestions:
                 
                 return execute_phase1_task
             
-            # Add all Phase 1 tasks to async executor
-            for task in phase1_tasks:
-                task_coro = create_phase1_task_coro(task)()
-                dep_task_ids = phase1_dependency_map.get(task.task_id, [])
-                
-                executor.add_task(
-                    task_id=task.task_id,
-                    coro=task_coro,
-                    dependencies=dep_task_ids
-                )
-                logger.debug(f"  📝 Added Phase 1 async task: {task.task_id} (depends on: {dep_task_ids}, quality_threshold: {task.quality_threshold})")
+            # Note: Phase 1 tasks are now executed SEQUENTIALLY with per-document approval
+            # The create_phase1_task_coro function is kept for potential future use but not used here
+            # because we need sequential execution with approval workflow
             
             # Execute Phase 1 tasks SEQUENTIALLY with per-document approval
             # Each document is generated, checked for quality, and then waits for user approval
@@ -2014,8 +2017,8 @@ Improvement Suggestions:
             phase1_task_results = {}
             
             # Execute each task sequentially and wait for approval
-            for task in ordered_phase1_tasks:
-                logger.info(f"📝 Generating {task.task_id}...")
+            for task_idx, task in enumerate(ordered_phase1_tasks, 1):
+                logger.info(f"📝 [{task_idx}/{len(ordered_phase1_tasks)}] Generating {task.task_id}...")
                 
                 # Get dependencies from context
                 deps_content: Dict[AgentType, str] = {}
@@ -2052,7 +2055,7 @@ Improvement Suggestions:
                     agent_type=task.agent_type,
                     generate_kwargs=kwargs,
                     output_filename=None,
-                    project_id=None,
+                    project_id=project_id,
                     quality_threshold=task.quality_threshold
                 )
                 
@@ -2062,6 +2065,13 @@ Improvement Suggestions:
                 # Map task_id to document display name
                 doc_name_map = {
                     "requirements": "Requirements",
+                    "project_charter": "Project Charter",
+                    "user_stories": "User Stories",
+                    "business_model": "Business Model",
+                    "marketing_plan": "Marketing Plan",
+                    "pm_doc": "PM Documentation",
+                    "stakeholder_doc": "Stakeholder Communication",
+                    "wbs": "Work Breakdown Structure",
                     "technical_doc": "Technical Specification",
                 }
                 doc_name = doc_name_map.get(task.task_id, task.task_id.replace("_", " ").title())
@@ -2085,54 +2095,132 @@ Improvement Suggestions:
                     results=results
                 )
                 
-                # Wait for user approval of this specific document
+                # Wait for user approval of this specific document with regeneration on rejection
                 logger.info(f"⏸️  {doc_name} generated and ready for review (quality score >= {task.quality_threshold})")
                 logger.info(f"⏳ Waiting for user approval of {doc_name}...")
                 
                 # Poll for approval of this specific document
                 max_wait_time = 3600  # 1 hour timeout
                 check_interval = 2  # Check every 2 seconds
-                waited_time = 0
+                max_regeneration_attempts = 3  # Maximum regeneration attempts after rejection
+                regeneration_attempts = 0
+                loop = asyncio.get_event_loop()
                 
-                while waited_time < max_wait_time:
-                    approval_status = self.context_manager.is_document_approved(project_id, task.agent_type)
+                while regeneration_attempts < max_regeneration_attempts:
+                    waited_time = 0
+                    approved = False
                     
-                    if approval_status is True:
-                        logger.info(f"✅ {doc_name} APPROVED by user - continuing...")
+                    # Wait for approval/rejection
+                    while waited_time < max_wait_time:
+                        try:
+                            # Run database check in executor to avoid blocking event loop
+                            approval_status = await loop.run_in_executor(
+                                None,
+                                lambda: self.context_manager.is_document_approved(project_id, task.agent_type)
+                            )
+                            
+                            if approval_status is True:
+                                logger.info(f"✅ {doc_name} APPROVED by user - breaking out of approval loop...")
+                                approved = True
+                                break
+                            elif approval_status is False:
+                                logger.info(f"❌ {doc_name} REJECTED by user - will regenerate (attempt {regeneration_attempts + 1}/{max_regeneration_attempts})")
+                                # New version will be created with pending status, so we don't need to clear rejection
+                                # The rejection status on the old version won't affect the new version
+                                await asyncio.sleep(1)  # Brief pause before regeneration
+                                break  # Break out of approval waiting loop to regenerate
+                            else:
+                                # Still pending, wait and check again
+                                if waited_time % 10 == 0:  # Log every 10 seconds
+                                    logger.debug(f"⏳ Still waiting for approval of {doc_name}... (waited {waited_time}s)")
+                                await asyncio.sleep(check_interval)
+                                waited_time += check_interval
+                                
+                                # Send periodic WebSocket updates
+                                if progress_callback and waited_time % 10 == 0:
+                                    await progress_callback("phase_1", doc_name, "awaiting_approval")
+                        except Exception as e:
+                            logger.error(f"Error checking approval status for {doc_name}: {e}", exc_info=True)
+                            # Continue waiting despite error
+                            await asyncio.sleep(check_interval)
+                            waited_time += check_interval
+                    
+                    # Check if approved
+                    if approved:
                         break
-                    elif approval_status is False:
-                        logger.info(f"❌ {doc_name} REJECTED by user - stopping workflow")
-                        results["status"][doc_type] = "rejected"
-                        results["error"] = f"{doc_name} was rejected by user"
+                    
+                    # Check if we timed out
+                    if waited_time >= max_wait_time:
+                        logger.warning(f"⏰ Approval timeout for {doc_name} after {max_wait_time} seconds")
+                        results["status"][doc_type] = "approval_timeout"
+                        results["error"] = f"{doc_name} approval timeout after {max_wait_time} seconds"
                         self.context_manager.update_project_status(
                             project_id=project_id,
-                            status=f"phase1_document_rejected:{doc_type}",
+                            status=f"phase1_document_timeout:{doc_type}",
                             results=results
                         )
                         return results
-                    else:
-                        # Still pending, wait and check again
-                        await asyncio.sleep(check_interval)
-                        waited_time += check_interval
-                        
-                        # Send periodic WebSocket updates
-                        if progress_callback and waited_time % 10 == 0:
-                            await progress_callback("phase_1", doc_name, "awaiting_approval")
-                
-                # Check if we timed out
-                if waited_time >= max_wait_time:
-                    logger.warning(f"⏰ Approval timeout for {doc_name} after {max_wait_time} seconds")
-                    results["status"][doc_type] = "approval_timeout"
-                    results["error"] = f"{doc_name} approval timeout after {max_wait_time} seconds"
-                    self.context_manager.update_project_status(
+                    
+                        # Document was rejected, regenerate
+                    regeneration_attempts += 1
+                    if regeneration_attempts >= max_regeneration_attempts:
+                        logger.error(f"❌ {doc_name} rejected {max_regeneration_attempts} times - stopping workflow")
+                        results["status"][doc_type] = "rejected_after_retries"
+                        results["error"] = f"{doc_name} was rejected {max_regeneration_attempts} times and regeneration limit reached"
+                        await loop.run_in_executor(
+                            None,
+                            lambda: self.context_manager.update_project_status(
+                                project_id=project_id,
+                                status=f"phase1_document_rejected_after_retries:{doc_type}",
+                                results=results
+                            )
+                        )
+                        return results
+                    
+                    # Regenerate the document
+                    logger.info(f"🔄 Regenerating {doc_name} (attempt {regeneration_attempts}/{max_regeneration_attempts})...")
+                    
+                    # Send progress update
+                    if progress_callback:
+                        await progress_callback("phase_1", doc_name, "regenerating")
+                    
+                    # Re-execute with quality gate (async version)
+                    # This will create a new version with pending approval status (approved=0)
+                    # The new version will be independent of the rejected version
+                    logger.info(f"🔍 Re-executing {task.task_id} with quality gate (threshold: {task.quality_threshold})...")
+                    file_path, content = await self._async_run_agent_with_quality_loop(
+                        agent_instance=agent,
+                        agent_type=task.agent_type,
+                        generate_kwargs=kwargs,
+                        output_filename=None,
                         project_id=project_id,
-                        status=f"phase1_document_timeout:{doc_type}",
-                        results=results
+                        quality_threshold=task.quality_threshold
                     )
-                    return results
+                    
+                    # Update result with regenerated content
+                    phase1_task_results[task.task_id] = (file_path, content)
+                    
+                    # Update status for regenerated document
+                    await loop.run_in_executor(
+                        None,
+                        lambda: self.context_manager.update_project_status(
+                            project_id=project_id,
+                            status=f"phase1_document_ready:{doc_type}",
+                            completed_agents=[doc_type],
+                            results=results
+                        )
+                    )
+                    
+                    # Send progress update
+                    if progress_callback:
+                        await progress_callback("phase_1", doc_name, "complete")
+                    
+                    logger.info(f"✅ {doc_name} regenerated - waiting for approval again...")
+                    logger.info(f"⏳ Waiting for user approval of {doc_name} (regenerated)...")
                 
                 # Document approved, continue to next
                 logger.info(f"✅ {doc_name} approved - proceeding to next document...")
+                logger.info(f"🔄 Continuing workflow loop - {len(ordered_phase1_tasks)} total tasks, {len(phase1_task_results)} completed")
             
             # Process Phase 1 results and update results dictionary
             req_content = None
@@ -2153,41 +2241,32 @@ Improvement Suggestions:
                         logger.warning(f"Unexpected result format for {task.task_id}: {type(task_result)}")
                         continue
                     
-                    # Update results dictionary
-                    if task.agent_type == AgentType.REQUIREMENTS_ANALYST:
-                        results["files"]["requirements"] = file_path
-                        results["status"]["requirements"] = "complete_v2"
-                        req_content = content
-                    elif task.agent_type == AgentType.PROJECT_CHARTER:
-                        results["files"]["project_charter"] = file_path
-                        results["status"]["project_charter"] = "complete_v2"
-                        charter_content = content
-                    elif task.agent_type == AgentType.USER_STORIES:
-                        results["files"]["user_stories"] = file_path
-                        results["status"]["user_stories"] = "complete_v2"
-                        stories_content = content
-                    elif task.agent_type == AgentType.TECHNICAL_DOCUMENTATION:
-                        results["files"]["technical_documentation"] = file_path
-                        results["status"]["technical_documentation"] = "complete_v2"
-                        tech_content = content
-                    elif task.agent_type == AgentType.DATABASE_SCHEMA:
-                        results["files"]["database_schema"] = file_path
-                        results["status"]["database_schema"] = "complete_v2"
-                        db_content = content
+                    # Map agent_type to doc_type for results storage
+                    doc_type = AGENT_TYPE_TO_DOC_TYPE_PHASE1.get(task.agent_type, task.agent_type.value)
                     
+                    # Update results dictionary
+                    results["files"][doc_type] = file_path
+                    results["status"][doc_type] = "complete_v2"
+                    
+                    # Store content for later use
                     final_docs[task.agent_type] = content
                     document_file_paths[task.agent_type] = file_path
+                    
+                    # Keep track of specific documents for validation
+                    if task.agent_type == AgentType.REQUIREMENTS_ANALYST:
+                        req_content = content
+                    elif task.agent_type == AgentType.PROJECT_CHARTER:
+                        charter_content = content
+                    elif task.agent_type == AgentType.USER_STORIES:
+                        stories_content = content
+                    elif task.agent_type == AgentType.TECHNICAL_DOCUMENTATION:
+                        tech_content = content
+                    elif task.agent_type == AgentType.DATABASE_SCHEMA:
+                        db_content = content
                 else:
                     logger.error(f"❌ Phase 1 task {task.task_id} failed or returned no result")
                     # Mark as failed in status
-                    doc_type_map = {
-                        AgentType.REQUIREMENTS_ANALYST: "requirements",
-                        AgentType.PROJECT_CHARTER: "project_charter",
-                        AgentType.USER_STORIES: "user_stories",
-                        AgentType.TECHNICAL_DOCUMENTATION: "technical_documentation",
-                        AgentType.DATABASE_SCHEMA: "database_schema",
-                    }
-                    doc_type = doc_type_map.get(task.agent_type, task.agent_type.value)
+                    doc_type = AGENT_TYPE_TO_DOC_TYPE_PHASE1.get(task.agent_type, task.agent_type.value)
                     results["status"][doc_type] = "failed"
             
             # Verify requirements were generated

@@ -236,26 +236,56 @@ class ContextManager:
                     elif isinstance(output.generated_at, str):
                         generated_at_str = output.generated_at
                 
+                # Check if output_id already exists
                 cursor.execute("""
-                    INSERT INTO agent_outputs (
-                        output_id, project_id, agent_type, document_type,
-                        content, file_path, quality_score, status,
-                        dependencies, generated_at, version, approved
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    output_id,
-                    project_id,
-                    output.agent_type.value,
-                    output.document_type,
-                    output.content,
-                    output.file_path,
-                    output.quality_score,
-                    output.status.value,
-                    json.dumps(dependencies),
-                    generated_at_str,
-                    version,
-                    0  # Default: pending approval
-                ))
+                    SELECT output_id FROM agent_outputs WHERE output_id = ?
+                """, (output_id,))
+                exists = cursor.fetchone() is not None
+                
+                if exists:
+                    # Update existing record (handles case where same version is saved multiple times)
+                    cursor.execute("""
+                        UPDATE agent_outputs SET
+                            content = ?,
+                            file_path = ?,
+                            quality_score = ?,
+                            status = ?,
+                            dependencies = ?,
+                            generated_at = ?,
+                            approved = ?
+                        WHERE output_id = ?
+                    """, (
+                        output.content,
+                        output.file_path,
+                        output.quality_score,
+                        output.status.value,
+                        json.dumps(dependencies),
+                        generated_at_str,
+                        0,  # Default: pending approval
+                        output_id
+                    ))
+                else:
+                    # Insert new record
+                    cursor.execute("""
+                        INSERT INTO agent_outputs (
+                            output_id, project_id, agent_type, document_type,
+                            content, file_path, quality_score, status,
+                            dependencies, generated_at, version, approved
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        output_id,
+                        project_id,
+                        output.agent_type.value,
+                        output.document_type,
+                        output.content,
+                        output.file_path,
+                        output.quality_score,
+                        output.status.value,
+                        json.dumps(dependencies),
+                        generated_at_str,
+                        version,
+                        0  # Default: pending approval
+                    ))
                 
                 self.connection.commit()
             except Exception as e:
@@ -263,33 +293,35 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error saving agent output for {project_id}/{output.agent_type.value}: {e}", exc_info=True)
+                self.connection.rollback()
                 raise
     
     def get_agent_output(self, project_id: str, agent_type: AgentType) -> Optional[AgentOutput]:
         """Get agent output for a project (latest version)"""
-        cursor = self.connection.cursor()
-        
-        # Get the latest version of the document
-        cursor.execute("""
-            SELECT * FROM agent_outputs 
-            WHERE project_id = ? AND agent_type = ?
-            ORDER BY version DESC LIMIT 1
-        """, (project_id, agent_type.value))
-        row = cursor.fetchone()
-        
-        if not row:
-            return None
-        
-        return AgentOutput(
-            agent_type=AgentType(row["agent_type"]),
-            document_type=row["document_type"],
-            content=row["content"],
-            file_path=row["file_path"],
-            quality_score=row["quality_score"],
-            status=DocumentStatus(row["status"]),
-            generated_at=datetime.fromisoformat(row["generated_at"]) if row["generated_at"] else None,
-            dependencies=json.loads(row["dependencies"] or "[]")
-        )
+        with self._lock:
+            cursor = self.connection.cursor()
+            
+            # Get the latest version of the document
+            cursor.execute("""
+                SELECT * FROM agent_outputs 
+                WHERE project_id = ? AND agent_type = ?
+                ORDER BY version DESC LIMIT 1
+            """, (project_id, agent_type.value))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            return AgentOutput(
+                agent_type=AgentType(row["agent_type"]),
+                document_type=row["document_type"],
+                content=row["content"],
+                file_path=row["file_path"],
+                quality_score=row["quality_score"],
+                status=DocumentStatus(row["status"]),
+                generated_at=datetime.fromisoformat(row["generated_at"]) if row["generated_at"] else None,
+                dependencies=json.loads(row["dependencies"] or "[]")
+            )
     
     def get_all_agent_outputs(self, project_id: str) -> Dict[AgentType, AgentOutput]:
         """Get all agent outputs for a project"""
@@ -491,6 +523,13 @@ class ContextManager:
                 logger.error(f"Error updating project status for {project_id}: {e}", exc_info=True)
                 raise
     
+    def _safe_get_row_value(self, row, key: str, default):
+        """Safely get a value from sqlite3.Row, returning default if key doesn't exist"""
+        try:
+            return row[key]
+        except (KeyError, IndexError):
+            return default
+    
     def get_project_status(self, project_id: str) -> Optional[Dict]:
         """
         Get project workflow status from database
@@ -520,9 +559,10 @@ class ContextManager:
             "error": row["error"],
             "completed_agents": json.loads(row["completed_agents"] or "[]"),
             "results": json.loads(row["results"] or "{}") if row["results"] else {},
-            "phase1_approved": row.get("phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
-            "phase1_approved_at": row.get("phase1_approved_at"),
-            "phase1_approval_notes": row.get("phase1_approval_notes")
+            # Handle optional columns that may not exist in older database schemas
+            "phase1_approved": self._safe_get_row_value(row, "phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
+            "phase1_approved_at": self._safe_get_row_value(row, "phase1_approved_at", None),
+            "phase1_approval_notes": self._safe_get_row_value(row, "phase1_approval_notes", None)
         }
     
     def approve_phase1(self, project_id: str, notes: Optional[str] = None) -> bool:
@@ -624,21 +664,41 @@ class ContextManager:
         """
         with self._lock:
             try:
+                import logging
+                logger = logging.getLogger(__name__)
                 cursor = self.connection.cursor()
                 now = datetime.now().isoformat()
-                output_id = f"{project_id}_{agent_type.value}"
                 
-                # Update the latest version of the document
+                # First, check if document exists
+                cursor.execute("""
+                    SELECT version, approved FROM agent_outputs 
+                    WHERE project_id = ? AND agent_type = ?
+                    ORDER BY version DESC LIMIT 1
+                """, (project_id, agent_type.value))
+                existing = cursor.fetchone()
+                
+                if not existing:
+                    logger.warning(f"No document found to approve: project_id={project_id}, agent_type={agent_type.value}")
+                    return False
+                
+                max_version = existing['version']
+                logger.info(f"Approving document: project_id={project_id}, agent_type={agent_type.value}, version={max_version}")
+                
+                # Update the latest version of the document (use explicit version number to avoid subquery issues)
                 cursor.execute("""
                     UPDATE agent_outputs 
                     SET approved = ?, approved_at = ?, approval_notes = ?
-                    WHERE project_id = ? AND agent_type = ? AND version = (
-                        SELECT MAX(version) FROM agent_outputs 
-                        WHERE project_id = ? AND agent_type = ?
-                    )
-                """, (1, now, notes, project_id, agent_type.value, project_id, agent_type.value))
+                    WHERE project_id = ? AND agent_type = ? AND version = ?
+                """, (1, now, notes, project_id, agent_type.value, max_version))
                 
+                rows_affected = cursor.rowcount
                 self.connection.commit()
+                
+                if rows_affected == 0:
+                    logger.warning(f"No rows updated when approving document: project_id={project_id}, agent_type={agent_type.value}")
+                    return False
+                
+                logger.info(f"✅ Document approved: {agent_type.value} (version {max_version})")
                 return True
             except Exception as e:
                 import logging
@@ -684,7 +744,7 @@ class ContextManager:
     
     def is_document_approved(self, project_id: str, agent_type: AgentType) -> Optional[bool]:
         """
-        Check if a specific document is approved (checks latest version)
+        Check if a specific document is approved (checks latest version only)
         
         Args:
             project_id: Project identifier
@@ -693,25 +753,29 @@ class ContextManager:
         Returns:
             True if approved, False if rejected, None if pending
         """
-        cursor = self.connection.cursor()
-        # Get the latest version of the document
-        cursor.execute("""
-            SELECT approved FROM agent_outputs 
-            WHERE project_id = ? AND agent_type = ?
-            ORDER BY version DESC LIMIT 1
-        """, (project_id, agent_type.value))
-        row = cursor.fetchone()
-        
-        if not row:
-            return None  # Document not generated yet
-        
-        approved = row["approved"]
-        if approved == 1:
-            return True
-        elif approved == 2:
-            return False
-        else:
-            return None  # Pending
+        with self._lock:
+            cursor = self.connection.cursor()
+            # Get the latest version of the document (regardless of approval status)
+            # This ensures we check the most recent version, not an old rejected version
+            cursor.execute("""
+                SELECT version, approved FROM agent_outputs 
+                WHERE project_id = ? AND agent_type = ?
+                ORDER BY version DESC LIMIT 1
+            """, (project_id, agent_type.value))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None  # Document not generated yet
+            
+            # Check the approval status of the latest version
+            approved = row["approved"]
+            
+            if approved == 1:
+                return True  # Approved
+            elif approved == 2:
+                return False  # Rejected
+            else:
+                return None  # Pending (approved=0 or NULL)
     
     def get_document_version(self, project_id: str, agent_type: AgentType) -> int:
         """
@@ -768,33 +832,60 @@ class ContextManager:
                 if version is None:
                     current_version = self.get_document_version(project_id, agent_type)
                     version = current_version + 1
-                
                 output_id = f"{project_id}_{agent_type.value}_v{version}"
                 now = datetime.now().isoformat()
                 
                 # Get document type from agent type
                 document_type = agent_type.value.replace("_", " ").title()
                 
+                # Check if output_id already exists
                 cursor.execute("""
-                    INSERT INTO agent_outputs (
-                        output_id, project_id, agent_type, document_type,
-                        content, file_path, quality_score, status,
-                        dependencies, generated_at, version, approved
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    output_id,
-                    project_id,
-                    agent_type.value,
-                    document_type,
-                    content,
-                    file_path,
-                    quality_score,
-                    DocumentStatus.COMPLETE.value,
-                    json.dumps([]),
-                    now,
-                    version,
-                    0  # Pending approval
-                ))
+                    SELECT output_id FROM agent_outputs WHERE output_id = ?
+                """, (output_id,))
+                exists = cursor.fetchone() is not None
+                
+                if exists:
+                    # Update existing record (handles case where same version is saved multiple times)
+                    cursor.execute("""
+                        UPDATE agent_outputs SET
+                            content = ?,
+                            file_path = ?,
+                            quality_score = ?,
+                            status = ?,
+                            generated_at = ?,
+                            approved = ?
+                        WHERE output_id = ?
+                    """, (
+                        content,
+                        file_path,
+                        quality_score,
+                        DocumentStatus.COMPLETE.value,
+                        now,
+                        0,  # Pending approval
+                        output_id
+                    ))
+                else:
+                    # Insert new record
+                    cursor.execute("""
+                        INSERT INTO agent_outputs (
+                            output_id, project_id, agent_type, document_type,
+                            content, file_path, quality_score, status,
+                            dependencies, generated_at, version, approved
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        output_id,
+                        project_id,
+                        agent_type.value,
+                        document_type,
+                        content,
+                        file_path,
+                        quality_score,
+                        DocumentStatus.COMPLETE.value,
+                        json.dumps([]),
+                        now,
+                        version,
+                        0  # Pending approval
+                    ))
                 
                 self.connection.commit()
                 return version
@@ -802,6 +893,7 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error saving document version for {project_id}/{agent_type.value}: {e}", exc_info=True)
+                self.connection.rollback()
                 raise
     
     def close(self):
