@@ -51,6 +51,7 @@ class APIDocumentationAgent(BaseAgent):
         requirements_summary: dict, 
         technical_summary: Optional[str] = None,
         database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         code_analysis_summary: Optional[str] = None
     ) -> str:
         """
@@ -60,6 +61,7 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
             database_schema_summary: Optional database schema summary with detailed SQL schemas
+            user_stories_summary: Optional user stories summary (Level 2 output) - used to design API endpoints that support user stories
             code_analysis_summary: Optional code analysis summary (for code-first mode)
                                   Contains analyzed codebase structure, classes, functions, etc.
         
@@ -71,6 +73,7 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary, 
             technical_summary, 
             database_schema_summary,
+            user_stories_summary=user_stories_summary,
             code_analysis_summary=code_analysis_summary
         )
         
@@ -85,6 +88,7 @@ class APIDocumentationAgent(BaseAgent):
         requirements_summary: dict, 
         technical_summary: Optional[str] = None,
         database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         code_analysis_summary: Optional[str] = None
     ) -> str:
         """
@@ -96,6 +100,7 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
             database_schema_summary: Optional database schema summary with detailed SQL schemas
+            user_stories_summary: Optional user stories summary (Level 2 output) - used to design API endpoints that support user stories
             code_analysis_summary: Optional code analysis summary (for code-first mode)
         
         Returns:
@@ -106,6 +111,7 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary, 
             technical_summary, 
             database_schema_summary,
+            user_stories_summary=user_stories_summary,
             code_analysis_summary=code_analysis_summary
         )
         
@@ -121,6 +127,7 @@ class APIDocumentationAgent(BaseAgent):
         requirements_summary: dict,
         technical_summary: Optional[str] = None,
         database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         code_analysis_summary: Optional[str] = None,
         output_filename: str = "api_documentation.md",
         project_id: Optional[str] = None,
@@ -134,6 +141,8 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
             database_schema_summary: Optional database schema summary with detailed SQL schemas
+            user_stories_summary: Optional user stories summary (Level 2 output) - used to design API endpoints that support user stories
+            code_analysis_summary: Optional code analysis summary (for code-first mode)
             output_filename: Filename to save
             project_id: Project ID for context sharing
             context_manager: Context manager for saving
@@ -141,15 +150,18 @@ class APIDocumentationAgent(BaseAgent):
         Returns:
             Absolute path to saved file
         """
-        # Extract code_analysis_summary from kwargs if not provided directly
+        # Extract code_analysis_summary and user_stories_summary from kwargs if not provided directly
         if code_analysis_summary is None:
             code_analysis_summary = kwargs.get("code_analysis_summary")
+        if user_stories_summary is None:
+            user_stories_summary = kwargs.get("user_stories_summary")
         
         # Generate documentation
         api_doc = self.generate(
             requirements_summary, 
             technical_summary, 
             database_schema_summary,
+            user_stories_summary=user_stories_summary,
             code_analysis_summary=code_analysis_summary
         )
         
@@ -179,6 +191,7 @@ class APIDocumentationAgent(BaseAgent):
         requirements_summary: dict,
         technical_summary: Optional[str] = None,
         database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         code_analysis_summary: Optional[str] = None,
         output_filename: str = "api_documentation.md",
         project_id: Optional[str] = None,
@@ -192,6 +205,7 @@ class APIDocumentationAgent(BaseAgent):
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
             database_schema_summary: Optional database schema summary with detailed SQL schemas
+            user_stories_summary: Optional user stories summary (Level 2 output) - used to design API endpoints that support user stories
             code_analysis_summary: Optional code analysis summary (for code-first mode)
             output_filename: Filename to save
             project_id: Project ID for context sharing
@@ -202,15 +216,18 @@ class APIDocumentationAgent(BaseAgent):
             Absolute path to saved file
         """
         import asyncio
-        # Extract code_analysis_summary from kwargs if not provided directly
+        # Extract code_analysis_summary and user_stories_summary from kwargs if not provided directly
         if code_analysis_summary is None:
             code_analysis_summary = kwargs.get("code_analysis_summary")
+        if user_stories_summary is None:
+            user_stories_summary = kwargs.get("user_stories_summary")
         
         # Generate documentation (async)
         api_doc = await self.async_generate(
             requirements_summary, 
             technical_summary, 
             database_schema_summary,
+            user_stories_summary=user_stories_summary,
             code_analysis_summary=code_analysis_summary
         )
         

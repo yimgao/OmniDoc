@@ -99,6 +99,7 @@ class StakeholderCommunicationAgent(BaseAgent):
         self,
         requirements_summary: dict,
         pm_summary: Optional[str] = None,
+        project_charter_summary: Optional[str] = None,  # Accept but not used
         output_filename: str = "stakeholder_summary.md",
         project_id: Optional[str] = None,
         context_manager: Optional[ContextManager] = None
@@ -144,6 +145,7 @@ class StakeholderCommunicationAgent(BaseAgent):
         self,
         requirements_summary: dict,
         pm_summary: Optional[str] = None,
+        project_charter_summary: Optional[str] = None,  # Accept but not used
         output_filename: str = "stakeholder_summary.md",
         project_id: Optional[str] = None,
         context_manager: Optional[ContextManager] = None

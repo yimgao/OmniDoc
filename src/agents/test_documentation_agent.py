@@ -50,7 +50,10 @@ class TestDocumentationAgent(BaseAgent):
     def generate(
         self,
         requirements_summary: dict,
-        technical_summary: Optional[str] = None
+        technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None,
+        database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None
     ) -> str:
         """
         Generate test documentation from requirements and technical specs
@@ -58,12 +61,21 @@ class TestDocumentationAgent(BaseAgent):
         Args:
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary - used to design API endpoint test cases
+            database_schema_summary: Optional database schema summary - used to design database operation test cases
+            user_stories_summary: Optional user stories summary - used to design user story test cases
         
         Returns:
             Generated test documentation (Markdown)
         """
         # Get prompt from centralized prompts config
-        full_prompt = get_test_prompt(requirements_summary, technical_summary)
+        full_prompt = get_test_prompt(
+            requirements_summary, 
+            technical_summary,
+            api_summary=api_summary,
+            database_schema_summary=database_schema_summary,
+            user_stories_summary=user_stories_summary
+        )
         
         try:
             test_doc = self._call_llm(full_prompt)
@@ -74,7 +86,10 @@ class TestDocumentationAgent(BaseAgent):
     async def async_generate(
         self,
         requirements_summary: dict,
-        technical_summary: Optional[str] = None
+        technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None,
+        database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None
     ) -> str:
         """
         Generate test documentation from requirements and technical specs (async)
@@ -82,12 +97,21 @@ class TestDocumentationAgent(BaseAgent):
         Args:
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary - used to design API endpoint test cases
+            database_schema_summary: Optional database schema summary - used to design database operation test cases
+            user_stories_summary: Optional user stories summary - used to design user story test cases
         
         Returns:
             Generated test documentation (Markdown)
         """
         # Get prompt from centralized prompts config
-        full_prompt = get_test_prompt(requirements_summary, technical_summary)
+        full_prompt = get_test_prompt(
+            requirements_summary, 
+            technical_summary,
+            api_summary=api_summary,
+            database_schema_summary=database_schema_summary,
+            user_stories_summary=user_stories_summary
+        )
         
         try:
             test_doc = await self._async_call_llm(full_prompt)
@@ -99,9 +123,13 @@ class TestDocumentationAgent(BaseAgent):
         self,
         requirements_summary: dict,
         technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None,
+        database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         output_filename: str = "test_plan.md",
         project_id: Optional[str] = None,
-        context_manager: Optional[ContextManager] = None
+        context_manager: Optional[ContextManager] = None,
+        **kwargs
     ) -> str:
         """
         Generate test documentation and save to file (sync version)
@@ -109,6 +137,9 @@ class TestDocumentationAgent(BaseAgent):
         Args:
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary - used to design API endpoint test cases
+            database_schema_summary: Optional database schema summary - used to design database operation test cases
+            user_stories_summary: Optional user stories summary - used to design user story test cases
             output_filename: Filename to save
             project_id: Project ID for context sharing
             context_manager: Context manager for saving
@@ -116,8 +147,22 @@ class TestDocumentationAgent(BaseAgent):
         Returns:
             Absolute path to saved file
         """
+        # Extract from kwargs if not provided directly
+        if api_summary is None:
+            api_summary = kwargs.get("api_summary")
+        if database_schema_summary is None:
+            database_schema_summary = kwargs.get("database_schema_summary")
+        if user_stories_summary is None:
+            user_stories_summary = kwargs.get("user_stories_summary")
+        
         # Generate documentation
-        test_doc = self.generate(requirements_summary, technical_summary)
+        test_doc = self.generate(
+            requirements_summary, 
+            technical_summary,
+            api_summary=api_summary,
+            database_schema_summary=database_schema_summary,
+            user_stories_summary=user_stories_summary
+        )
         
         # Save to file
         try:
@@ -144,9 +189,13 @@ class TestDocumentationAgent(BaseAgent):
         self,
         requirements_summary: dict,
         technical_summary: Optional[str] = None,
+        api_summary: Optional[str] = None,
+        database_schema_summary: Optional[str] = None,
+        user_stories_summary: Optional[str] = None,
         output_filename: str = "test_plan.md",
         project_id: Optional[str] = None,
-        context_manager: Optional[ContextManager] = None
+        context_manager: Optional[ContextManager] = None,
+        **kwargs
     ) -> str:
         """
         Generate test documentation and save to file (async version)
@@ -154,6 +203,9 @@ class TestDocumentationAgent(BaseAgent):
         Args:
             requirements_summary: Summary from Requirements Analyst
             technical_summary: Optional technical documentation summary
+            api_summary: Optional API documentation summary - used to design API endpoint test cases
+            database_schema_summary: Optional database schema summary - used to design database operation test cases
+            user_stories_summary: Optional user stories summary - used to design user story test cases
             output_filename: Filename to save
             project_id: Project ID for context sharing
             context_manager: Context manager for saving
@@ -162,8 +214,22 @@ class TestDocumentationAgent(BaseAgent):
             Absolute path to saved file
         """
         import asyncio
+        # Extract from kwargs if not provided directly
+        if api_summary is None:
+            api_summary = kwargs.get("api_summary")
+        if database_schema_summary is None:
+            database_schema_summary = kwargs.get("database_schema_summary")
+        if user_stories_summary is None:
+            user_stories_summary = kwargs.get("user_stories_summary")
+        
         # Generate documentation (async)
-        test_doc = await self.async_generate(requirements_summary, technical_summary)
+        test_doc = await self.async_generate(
+            requirements_summary, 
+            technical_summary,
+            api_summary=api_summary,
+            database_schema_summary=database_schema_summary,
+            user_stories_summary=user_stories_summary
+        )
         
         # Save to file (file I/O in executor)
         loop = asyncio.get_event_loop()
