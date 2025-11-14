@@ -119,10 +119,16 @@ class ContextManager:
                 phase1_approved INTEGER DEFAULT 0,  -- 0 = pending, 1 = approved, 2 = rejected
                 phase1_approved_at TEXT,  -- Timestamp when Phase 1 was approved
                 phase1_approval_notes TEXT,  -- User notes/comments during approval
+                selected_documents TEXT,
                 FOREIGN KEY (project_id) REFERENCES projects(project_id)
             )
         """)
         
+        cursor.execute("PRAGMA table_info(project_status)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "selected_documents" not in columns:
+            cursor.execute("ALTER TABLE project_status ADD COLUMN selected_documents TEXT")
+
         self.connection.commit()
     
     def create_project(self, project_id: str, user_idea: str) -> str:
@@ -434,7 +440,8 @@ class ContextManager:
         provider_name: Optional[str] = None,
         completed_agents: Optional[List[str]] = None,
         results: Optional[Dict] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
+        selected_documents: Optional[List[str]] = None,
     ):
         """
         Update project workflow status in database (thread-safe)
@@ -480,6 +487,10 @@ class ContextManager:
                         update_fields.append("completed_at = ?")
                         update_values.append(now)
                     
+                    if selected_documents is not None:
+                        update_fields.append("selected_documents = ?")
+                        update_values.append(json.dumps(selected_documents))
+
                     update_values.append(project_id)
                     cursor.execute(f"""
                         UPDATE project_status 
@@ -501,8 +512,8 @@ class ContextManager:
                     cursor.execute("""
                         INSERT INTO project_status (
                             project_id, status, user_idea, profile, provider_name,
-                            started_at, completed_agents, results, error, phase1_approved
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            started_at, completed_agents, results, error, phase1_approved, selected_documents
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         project_id,
                         status,
@@ -513,7 +524,8 @@ class ContextManager:
                         json.dumps(completed_agents or []),
                         json.dumps(results or {}),
                         error,
-                        0  # Default: pending approval
+                        0,  # Default: pending approval
+                        json.dumps(selected_documents or []),
                     ))
                 
                 self.connection.commit()
@@ -559,6 +571,9 @@ class ContextManager:
             "error": row["error"],
             "completed_agents": json.loads(row["completed_agents"] or "[]"),
             "results": json.loads(row["results"] or "{}") if row["results"] else {},
+            "selected_documents": json.loads(row["selected_documents"] or "[]")
+            if "selected_documents" in row.keys()
+            else [],
             # Handle optional columns that may not exist in older database schemas
             "phase1_approved": self._safe_get_row_value(row, "phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
             "phase1_approved_at": self._safe_get_row_value(row, "phase1_approved_at", None),
@@ -896,6 +911,50 @@ class ContextManager:
                 self.connection.rollback()
                 raise
     
+    def get_documents_for_project(
+        self,
+        project_id: str,
+        document_ids: Optional[List[str]] = None,
+        include_content: bool = False,
+    ) -> Dict[str, Dict[str, str]]:
+        """
+        Retrieve generated documents for a project.
+
+        Args:
+            project_id: Target project identifier.
+            document_ids: Optional subset of document IDs.
+            include_content: When True, include document content by reading from disk.
+
+        Returns:
+            Mapping of document_id -> metadata dictionary.
+        """
+        status = self.get_project_status(project_id)
+        if not status:
+            return {}
+
+        results = status.get("results") or {}
+        documents = results.get("documents") or []
+        wanted = set(document_ids) if document_ids else None
+        documents_map: Dict[str, Dict[str, str]] = {}
+
+        for entry in documents:
+            doc_id = entry.get("id")
+            if not doc_id:
+                continue
+            if wanted and doc_id not in wanted:
+                continue
+
+            item = dict(entry)
+            file_path = item.get("file_path")
+            if include_content and file_path:
+                try:
+                    item["content"] = Path(file_path).read_text(encoding="utf-8")
+                except OSError:
+                    item["content"] = None
+            documents_map[doc_id] = item
+
+        return documents_map
+
     def close(self):
         """Close database connection"""
         if self.connection:
