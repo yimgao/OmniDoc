@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { DocumentTemplate, getDocumentTemplates } from '../lib/api';
+import { t, getLanguage, setLanguage, languages, languageNames, type Language } from '../lib/i18n';
+import { rankDocuments, filterDocumentsByView, organizeByLevel, DocumentLevel, LEVEL_NAMES, LEVEL_ICONS, type ViewMode } from '../lib/documentRanking';
 
 interface DocumentSelectorProps {
   selectedDocuments: string[];
@@ -15,9 +17,8 @@ export default function DocumentSelector({
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set()
-  );
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [currentLang, setCurrentLang] = useState<Language>(getLanguage());
 
   useEffect(() => {
     async function loadTemplates() {
@@ -26,7 +27,7 @@ export default function DocumentSelector({
         setTemplates(response.documents);
         setLoading(false);
       } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load documents';
+        const errorMessage = err instanceof Error ? err.message : t('error.loadDocuments');
         console.error('Error loading document templates:', err);
         setError(errorMessage);
         setLoading(false);
@@ -35,18 +36,10 @@ export default function DocumentSelector({
     loadTemplates();
   }, []);
 
-  // Group documents by category
-  const documentsByCategory = templates.reduce(
-    (acc, doc) => {
-      const category = doc.category || 'Uncategorized';
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(doc);
-      return acc;
-    },
-    {} as Record<string, DocumentTemplate[]>
-  );
+  // Filter and rank documents
+  const filteredDocs = filterDocumentsByView(templates, viewMode);
+  const rankedDocs = rankDocuments(filteredDocs);
+  const organizedDocs = organizeByLevel(rankedDocs);
 
   const toggleDocument = (docId: string) => {
     if (selectedDocuments.includes(docId)) {
@@ -56,42 +49,69 @@ export default function DocumentSelector({
     }
   };
 
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    setCurrentLang(lang);
   };
 
-  const selectAllInCategory = (category: string) => {
-    const categoryDocs = documentsByCategory[category] || [];
-    const categoryIds = categoryDocs.map((doc) => doc.id);
-    const allSelected = categoryIds.every((id) =>
-      selectedDocuments.includes(id)
-    );
+  const renderDocumentList = (docs: DocumentTemplate[], level: DocumentLevel) => {
+    if (docs.length === 0) return null;
 
-    if (allSelected) {
-      // Deselect all in category
-      onSelectionChange(
-        selectedDocuments.filter((id) => !categoryIds.includes(id))
-      );
-    } else {
-      // Select all in category
-      const newSelected = [
-        ...selectedDocuments.filter((id) => !categoryIds.includes(id)),
-        ...categoryIds,
-      ];
-      onSelectionChange(newSelected);
-    }
+    return (
+      <div key={level} className="space-y-2">
+        {docs.map((doc) => (
+          <label
+            key={doc.id}
+            className="flex items-start space-x-3 rounded-lg border border-gray-200 bg-white p-3 hover:bg-gray-50 transition-colors"
+          >
+            <input
+              type="checkbox"
+              checked={selectedDocuments.includes(doc.id)}
+              onChange={() => toggleDocument(doc.id)}
+              className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{doc.name}</span>
+                {doc.priority && (
+                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${
+                    doc.priority.includes('高') || doc.priority.includes('High')
+                      ? 'bg-red-100 text-red-800'
+                      : doc.priority.includes('中') || doc.priority.includes('Medium')
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {doc.priority}
+                  </span>
+                )}
+              </div>
+              {doc.description && (
+                <div className="mt-1 text-sm text-gray-600">
+                  {doc.description}
+                </div>
+              )}
+              {doc.dependencies && doc.dependencies.length > 0 && (
+                <div className="mt-1 text-xs text-gray-500">
+                  {t('documents.dependencies')}:{' '}
+                  {doc.dependencies
+                    .map((depId) => {
+                      const depDoc = templates.find((t) => t.id === depId);
+                      return depDoc?.name || depId;
+                    })
+                    .join(', ')}
+                </div>
+              )}
+            </div>
+          </label>
+        ))}
+      </div>
+    );
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-gray-500">Loading document templates...</div>
+        <div className="text-gray-500">{t('documents.select')}...</div>
       </div>
     );
   }
@@ -99,96 +119,188 @@ export default function DocumentSelector({
   if (error) {
     return (
       <div className="rounded-lg bg-red-50 p-4 text-red-800">
-        Error: {error}
+        {t('error.loadDocuments')}: {error}
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Select Documents</h3>
+      {/* Language Selector */}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+        <span className="text-sm font-medium text-gray-700">Language:</span>
+        <div className="flex gap-2">
+          {languages.map((lang) => (
+            <button
+              key={lang}
+              onClick={() => handleLanguageChange(lang)}
+              className={`rounded px-3 py-1 text-sm transition-colors ${
+                currentLang === lang
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {languageNames[lang]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* View Mode Selector */}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+        <span className="text-sm font-medium text-gray-700">{t('documents.title')}:</span>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setViewMode('all')}
+            className={`rounded px-3 py-1 text-sm transition-colors ${
+              viewMode === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {t('documents.all')}
+          </button>
+          <button
+            onClick={() => setViewMode('team')}
+            className={`rounded px-3 py-1 text-sm transition-colors ${
+              viewMode === 'team'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {t('documents.team')}
+          </button>
+          <button
+            onClick={() => setViewMode('solo')}
+            className={`rounded px-3 py-1 text-sm transition-colors ${
+              viewMode === 'solo'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            {t('documents.solo')}
+          </button>
+        </div>
+      </div>
+
+      {/* Document Count Summary */}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+        <h3 className="text-lg font-semibold">{t('documents.select')}</h3>
         <span className="text-sm text-gray-500">
-          {selectedDocuments.length} selected
+          {selectedDocuments.length} {t('documents.selected')} ({rankedDocs.length} {t('documents.all')})
         </span>
       </div>
 
-      <div className="space-y-2">
-        {Object.entries(documentsByCategory).map(([category, docs]) => {
-          const isExpanded = expandedCategories.has(category);
-          const categorySelected = docs.filter((doc) =>
-            selectedDocuments.includes(doc.id)
-          ).length;
-          const allSelected = categorySelected === docs.length;
-
-          return (
-            <div
-              key={category}
-              className="rounded-lg border border-gray-200 bg-white"
-            >
-              <div className="flex items-center justify-between p-3">
-                <button
-                  onClick={() => toggleCategory(category)}
-                  className="flex flex-1 items-center justify-between text-left"
-                >
-                  <span className="font-medium">{category}</span>
-                  <span className="text-sm text-gray-500">
-                    {categorySelected}/{docs.length} selected
-                  </span>
-                </button>
-                <button
-                  onClick={() => selectAllInCategory(category)}
-                  className="ml-4 rounded px-2 py-1 text-sm text-blue-600 hover:bg-blue-50"
-                >
-                  {allSelected ? 'Deselect All' : 'Select All'}
-                </button>
-              </div>
-
-              {isExpanded && (
-                <div className="border-t border-gray-200 p-3">
-                  <div className="space-y-2">
-                    {docs.map((doc) => (
-                      <label
-                        key={doc.id}
-                        className="flex items-start space-x-3 rounded p-2 hover:bg-gray-50"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedDocuments.includes(doc.id)}
-                          onChange={() => toggleDocument(doc.id)}
-                          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium">{doc.name}</div>
-                          {doc.description && (
-                            <div className="text-sm text-gray-500">
-                              {doc.description}
-                            </div>
-                          )}
-                          {doc.dependencies && doc.dependencies.length > 0 && (
-                            <div className="mt-1 text-xs text-gray-400">
-                              Requires:{' '}
-                              {doc.dependencies
-                                .map((depId) => {
-                                  const depDoc = templates.find(
-                                    (t) => t.id === depId
-                                  );
-                                  return depDoc?.name || depId;
-                                })
-                                .join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
+      {/* Documents organized by Strategic Levels */}
+      <div className="space-y-6">
+        {/* Level 1: Strategic */}
+        {organizedDocs.strategic.length > 0 && (
+          <div className="rounded-lg border-2 border-purple-200 bg-purple-50">
+            <div className="border-b border-purple-200 bg-purple-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-purple-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.STRATEGIC]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.STRATEGIC]}</span>
+                <span className="ml-auto text-sm font-normal text-purple-700">
+                  ({organizedDocs.strategic.length} documents)
+                </span>
+              </h4>
             </div>
-          );
-        })}
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.strategic, DocumentLevel.STRATEGIC)}
+            </div>
+          </div>
+        )}
+
+        {/* Level 2: Product Manager */}
+        {organizedDocs.product.length > 0 && (
+          <div className="rounded-lg border-2 border-blue-200 bg-blue-50">
+            <div className="border-b border-blue-200 bg-blue-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-blue-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.PRODUCT]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.PRODUCT]}</span>
+                <span className="ml-auto text-sm font-normal text-blue-700">
+                  ({organizedDocs.product.length} documents)
+                </span>
+              </h4>
+            </div>
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.product, DocumentLevel.PRODUCT)}
+            </div>
+          </div>
+        )}
+
+        {/* Level 3: Developer/Technical */}
+        {organizedDocs.developer.length > 0 && (
+          <div className="rounded-lg border-2 border-green-200 bg-green-50">
+            <div className="border-b border-green-200 bg-green-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-green-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.DEVELOPER]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.DEVELOPER]}</span>
+                <span className="ml-auto text-sm font-normal text-green-700">
+                  ({organizedDocs.developer.length} documents)
+                </span>
+              </h4>
+            </div>
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.developer, DocumentLevel.DEVELOPER)}
+            </div>
+          </div>
+        )}
+
+        {/* Level 4: User/End-user */}
+        {organizedDocs.user.length > 0 && (
+          <div className="rounded-lg border-2 border-yellow-200 bg-yellow-50">
+            <div className="border-b border-yellow-200 bg-yellow-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-yellow-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.USER]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.USER]}</span>
+                <span className="ml-auto text-sm font-normal text-yellow-700">
+                  ({organizedDocs.user.length} documents)
+                </span>
+              </h4>
+            </div>
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.user, DocumentLevel.USER)}
+            </div>
+          </div>
+        )}
+
+        {/* Level 5: Operations/Maintenance */}
+        {organizedDocs.operations.length > 0 && (
+          <div className="rounded-lg border-2 border-orange-200 bg-orange-50">
+            <div className="border-b border-orange-200 bg-orange-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-orange-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.OPERATIONS]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.OPERATIONS]}</span>
+                <span className="ml-auto text-sm font-normal text-orange-700">
+                  ({organizedDocs.operations.length} documents)
+                </span>
+              </h4>
+            </div>
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.operations, DocumentLevel.OPERATIONS)}
+            </div>
+          </div>
+        )}
+
+        {/* Cross-Level (Everyone) */}
+        {organizedDocs.crossLevel.length > 0 && (
+          <div className="rounded-lg border-2 border-gray-200 bg-gray-50">
+            <div className="border-b border-gray-200 bg-gray-100 p-4">
+              <h4 className="flex items-center gap-2 font-semibold text-gray-900">
+                <span className="text-xl">{LEVEL_ICONS[DocumentLevel.CROSS_LEVEL]}</span>
+                <span>{LEVEL_NAMES[DocumentLevel.CROSS_LEVEL]}</span>
+                <span className="ml-auto text-sm font-normal text-gray-700">
+                  ({organizedDocs.crossLevel.length} documents)
+                </span>
+              </h4>
+            </div>
+            <div className="p-4">
+              {renderDocumentList(organizedDocs.crossLevel, DocumentLevel.CROSS_LEVEL)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
-

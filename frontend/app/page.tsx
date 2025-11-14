@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import DocumentSelector from '@/components/DocumentSelector';
 import { createProject } from '@/lib/api';
+import { t } from '@/lib/i18n';
 
 export default function Home() {
   const router = useRouter();
@@ -41,12 +42,12 @@ export default function Home() {
     setError(null);
 
     if (!userIdea.trim()) {
-      setError('Please enter your project idea');
+      setError(t('project.idea.placeholder'));
       return;
     }
 
     if (selectedDocuments.length === 0) {
-      setError('Please select at least one document to generate');
+      setError(t('documents.select'));
       return;
     }
 
@@ -61,7 +62,7 @@ export default function Home() {
       // Navigate to project status page
       router.push(`/project/${response.project_id}`);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create project. Please try again.';
+      const errorMessage = err instanceof Error ? err.message : t('error.createProject');
       console.error('Error creating project:', err);
       setError(errorMessage);
       setIsSubmitting(false);
@@ -73,10 +74,10 @@ export default function Home() {
       <div className="mx-auto max-w-4xl px-4 py-12">
         <div className="mb-8 text-center">
           <h1 className="text-4xl font-bold text-gray-900">
-            OmniDoc 2.0
+            {t('app.title')}
           </h1>
           <p className="mt-2 text-lg text-gray-600">
-            AI-powered documentation generation system
+            {t('app.subtitle')}
           </p>
         </div>
 
@@ -87,20 +88,19 @@ export default function Home() {
               htmlFor="userIdea"
               className="block text-sm font-medium text-gray-700"
             >
-              Project Idea
+              {t('project.idea')}
             </label>
             <textarea
               id="userIdea"
               value={userIdea}
               onChange={(e) => setUserIdea(e.target.value)}
-              placeholder="Describe your project idea here... For example: 'Create a task management application with user authentication, project boards, and real-time collaboration features.'"
+              placeholder={t('project.idea.placeholder')}
               rows={6}
               className="mt-2 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
               required
             />
             <p className="mt-2 text-sm text-gray-500">
-              Provide a detailed description of your project. The more details
-              you include, the better the generated documentation will be.
+              {t('project.idea.description')}
             </p>
           </div>
 
@@ -126,7 +126,7 @@ export default function Home() {
               disabled={isSubmitting || selectedDocuments.length === 0}
               className="rounded-lg bg-blue-600 px-8 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? 'Creating Project...' : 'Generate Documents'}
+              {isSubmitting ? t('button.creating') : t('button.generate')}
             </button>
           </div>
         </form>
