@@ -53,11 +53,9 @@ Total: ~500MB - 1.1GB, which fits comfortably in 1GB RAM (AMD) or easily in ARM 
 Update your `.env` file:
 
 ```bash
-# Neon Database Connection (Production)
-DATABASE_URL=postgresql://neondb_owner:npg_wUg5P3SnCMcF@ep-divine-meadow-a4epnyhw-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+# Neon Database Connection
+DATABASE_URL=postgresql://user:password@ep-xxx-xxx.region.neon.tech/dbname?sslmode=require
 ```
-
-**Note**: The production connection string is already configured in the deployment script. For development, you can create a separate Neon project or use the production database.
 
 ### 5. Initialize Database Tables
 
@@ -73,15 +71,13 @@ This will create all necessary tables in your Neon database.
 
 Neon connection strings typically look like:
 ```
-postgresql://[user]:[password]@[endpoint]/[dbname]?sslmode=require&channel_binding=require
+postgresql://[user]:[password]@[endpoint]/[dbname]?sslmode=require
 ```
 
-**Production Example** (already configured):
+Example:
 ```
-postgresql://neondb_owner:npg_wUg5P3SnCMcF@ep-divine-meadow-a4epnyhw-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+postgresql://neondb_owner:AbCdEf123456@ep-cool-darkness-123456.us-east-2.aws.neon.tech/neondb?sslmode=require
 ```
-
-**Note**: The `channel_binding=require` parameter provides additional security for the connection.
 
 ## Security Notes
 

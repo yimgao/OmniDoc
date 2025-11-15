@@ -39,13 +39,11 @@ echo -e "${GREEN}Step 4: Configuring Neon Database (Managed PostgreSQL)...${NC}"
 echo -e "${YELLOW}We'll use Neon (https://neon.tech) for managed PostgreSQL.${NC}"
 echo -e "${YELLOW}This saves memory on your Oracle Cloud instance!${NC}"
 echo ""
-echo "Please create a Neon project at https://console.neon.tech:"
-echo "  1. Sign up/login at https://neon.tech"
-echo "  2. Create a new project"
-echo "  3. Copy the connection string (it looks like: postgresql://user:password@ep-xxx.region.neon.tech/dbname)"
+echo "Production Neon connection string is pre-configured."
+echo "If you need to use a different database, you can update it in .env file later."
 echo ""
-read -p "Enter your Neon DATABASE_URL (or press Enter to set later): " NEON_DATABASE_URL
-NEON_DATABASE_URL=${NEON_DATABASE_URL:-""}
+read -p "Enter your Neon DATABASE_URL (or press Enter to use production default): " NEON_DATABASE_URL
+NEON_DATABASE_URL=${NEON_DATABASE_URL:-"postgresql://neondb_owner:npg_wUg5P3SnCMcF@ep-divine-meadow-a4epnyhw-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"}
 
 echo -e "${GREEN}Step 5: Setting up Redis...${NC}"
 read -sp "Enter Redis password: " REDIS_PASSWORD
@@ -74,13 +72,9 @@ echo -e "${GREEN}Step 8: Configuring environment...${NC}"
 if [ ! -f .env ]; then
     echo -e "${YELLOW}Creating .env file with production settings...${NC}"
     
-    # Use Neon DATABASE_URL if provided, otherwise use placeholder
-    if [ -n "$NEON_DATABASE_URL" ]; then
-        DB_URL="$NEON_DATABASE_URL"
-    else
-        DB_URL="postgresql://user:password@ep-xxx.region.neon.tech/dbname"
-        echo -e "${YELLOW}⚠️  Using placeholder DATABASE_URL. Please update with your Neon connection string!${NC}"
-    fi
+    # Use Neon DATABASE_URL (production default is pre-configured)
+    DB_URL="$NEON_DATABASE_URL"
+    echo -e "${GREEN}✅ Using Neon DATABASE_URL${NC}"
     
     cat > .env <<EOF
 # =============================================================================
