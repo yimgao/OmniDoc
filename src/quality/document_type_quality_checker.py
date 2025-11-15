@@ -1,13 +1,44 @@
 """
 Document Type-Aware Quality Checker
 Provides document-type-specific quality checking with appropriate thresholds
+Uses quality_rules.json for configuration
 """
+import json
 import re
+from pathlib import Path
 from typing import Dict, List, Optional
 from src.quality.quality_checker import QualityChecker
 from src.context.shared_context import AgentType
+from src.utils.logger import get_logger
 
-# Document type-specific quality requirements
+logger = get_logger(__name__)
+
+# Load quality rules from JSON file
+def _load_quality_rules() -> Dict[str, Dict]:
+    """Load quality rules from quality_rules.json"""
+    try:
+        # Try to find the file in config directory
+        config_path = Path(__file__).parent.parent / "config" / "quality_rules.json"
+        if not config_path.exists():
+            # Fallback to current directory
+            config_path = Path("src/config/quality_rules.json")
+        
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                rules = json.load(f)
+                logger.info(f"Loaded quality rules from {config_path}")
+                return rules
+        else:
+            logger.warning(f"Quality rules file not found at {config_path}, using defaults")
+            return {}
+    except Exception as e:
+        logger.error(f"Error loading quality rules: {e}", exc_info=True)
+        return {}
+
+# Load rules at module level
+QUALITY_RULES = _load_quality_rules()
+
+# Legacy document type-specific quality requirements (fallback)
 DOCUMENT_TYPE_REQUIREMENTS = {
     AgentType.REQUIREMENTS_ANALYST: {
         "min_words": 300,
@@ -193,28 +224,102 @@ class DocumentTypeQualityChecker:
         """Initialize document type quality checker"""
         self.base_checker = QualityChecker()
     
+    def _convert_section_to_regex(self, section_name: str) -> str:
+        """Convert section name to regex pattern for matching markdown headings"""
+        # Escape special regex characters, but allow / and spaces
+        escaped = re.escape(section_name)
+        # Replace escaped spaces with \s+ to allow flexible spacing
+        escaped = escaped.replace(r'\ ', r'\s+')
+        # Replace / with optional space
+        escaped = escaped.replace(r'\/', r'[/\s]+')
+        # Match any heading level (#, ##, ###, etc.)
+        return rf"^#+\s+{escaped}"
+    
+    def _parse_readability_target(self, target_str: str) -> float:
+        """Parse readability target range (e.g., '50-65') and return minimum value"""
+        try:
+            if '-' in target_str:
+                min_val, max_val = target_str.split('-')
+                return float(min_val.strip())
+            else:
+                return float(target_str.strip())
+        except (ValueError, AttributeError):
+            return 50.0  # Default
+    
     def get_requirements_for_type(self, document_type: str) -> Dict:
         """
         Get quality requirements for a specific document type
+        First tries quality_rules.json, then falls back to legacy DOCUMENT_TYPE_REQUIREMENTS
         
         Args:
-            document_type: Document type (AgentType enum value or string)
+            document_type: Document type (document name or AgentType enum value)
             
         Returns:
-            Dict with min_words, required_sections, min_readability
+            Dict with min_words, required_sections, min_readability, and optional fields
         """
-        # Try to match document type
-        doc_type_lower = document_type.lower().replace('_', ' ').replace('-', ' ')
+        # Normalize document type for matching
+        doc_type_normalized = document_type.strip()
+        doc_type_lower = doc_type_normalized.lower().replace('_', ' ').replace('-', ' ')
         
+        # First, try to find in quality_rules.json
+        if QUALITY_RULES:
+            # Try exact match
+            if doc_type_normalized in QUALITY_RULES:
+                rules = QUALITY_RULES[doc_type_normalized]
+                # Convert to format expected by QualityChecker
+                required_sections = [
+                    self._convert_section_to_regex(section)
+                    for section in rules.get("required_sections", [])
+                ]
+                
+                return {
+                    "min_words": rules.get("min_word_count", 500),
+                    "required_sections": required_sections,
+                    "min_readability": self._parse_readability_target(
+                        rules.get("readability_target", "50-70")
+                    ),
+                    "readability_target": rules.get("readability_target", "50-70"),
+                    "optional_sections": rules.get("optional_sections", []),
+                    "llm_focus": rules.get("llm_focus", []),
+                    "auto_fail": rules.get("auto_fail", []),
+                    "source": "quality_rules.json"
+                }
+            
+            # Try fuzzy match (case-insensitive, partial)
+            for rule_name, rules in QUALITY_RULES.items():
+                rule_name_lower = rule_name.lower()
+                if (doc_type_lower in rule_name_lower or 
+                    rule_name_lower in doc_type_lower or
+                    doc_type_normalized.lower() == rule_name_lower):
+                    # Convert to format expected by QualityChecker
+                    required_sections = [
+                        self._convert_section_to_regex(section)
+                        for section in rules.get("required_sections", [])
+                    ]
+                    
+                    return {
+                        "min_words": rules.get("min_word_count", 500),
+                        "required_sections": required_sections,
+                        "min_readability": self._parse_readability_target(
+                            rules.get("readability_target", "50-70")
+                        ),
+                        "readability_target": rules.get("readability_target", "50-70"),
+                        "optional_sections": rules.get("optional_sections", []),
+                        "llm_focus": rules.get("llm_focus", []),
+                        "auto_fail": rules.get("auto_fail", []),
+                        "source": "quality_rules.json"
+                    }
+        
+        # Fallback to legacy DOCUMENT_TYPE_REQUIREMENTS
         # Try exact match first
         for agent_type, requirements in DOCUMENT_TYPE_REQUIREMENTS.items():
             if agent_type.value.lower() == document_type.lower():
-                return requirements
+                return {**requirements, "source": "legacy"}
         
         # Try partial match
         for agent_type, requirements in DOCUMENT_TYPE_REQUIREMENTS.items():
             if doc_type_lower in agent_type.value.lower() or agent_type.value.lower() in doc_type_lower:
-                return requirements
+                return {**requirements, "source": "legacy"}
         
         # Default requirements for unknown types
         return {
@@ -222,7 +327,84 @@ class DocumentTypeQualityChecker:
             "required_sections": [
                 r"^#+\s+.*",  # At least one section
             ],
-            "min_readability": 50.0
+            "min_readability": 50.0,
+            "readability_target": "50-70",
+            "optional_sections": [],
+            "llm_focus": [],
+            "auto_fail": [],
+            "source": "default"
+        }
+    
+    def _check_auto_fail(self, content: str, auto_fail_rules: List[str]) -> Dict:
+        """
+        Check if document fails any auto_fail rules
+        
+        Args:
+            content: Document content
+            auto_fail_rules: List of auto-fail conditions (e.g., ["Missing Scope OR Goals", "No milestones"])
+            
+        Returns:
+            Dict with auto_fail_passed, auto_fail_violations
+        """
+        violations = []
+        
+        for rule in auto_fail_rules:
+            rule_lower = rule.lower()
+            
+            # Handle OR conditions (e.g., "Missing Scope OR Goals")
+            if " or " in rule_lower:
+                parts = [p.strip() for p in rule.split(" OR ", 1)]
+                # Check if NEITHER part is found
+                found_any = False
+                for part in parts:
+                    # Remove "Missing" prefix if present
+                    part_clean = part.replace("missing", "").strip()
+                    if part_clean:
+                        # Check if section exists
+                        pattern = self._convert_section_to_regex(part_clean)
+                        if re.search(pattern, content, re.MULTILINE | re.IGNORECASE):
+                            found_any = True
+                            break
+                
+                if not found_any:
+                    violations.append(rule)
+            
+            # Handle "No X" or "Missing X" patterns
+            elif rule_lower.startswith("no ") or rule_lower.startswith("missing "):
+                # Extract the key term
+                if rule_lower.startswith("no "):
+                    key_term = rule_lower[3:].strip()
+                else:  # "missing "
+                    key_term = rule_lower[8:].strip()
+                
+                # Check if term/section exists
+                pattern = self._convert_section_to_regex(key_term)
+                if not re.search(pattern, content, re.MULTILINE | re.IGNORECASE):
+                    # Also check if key term appears in content (case-insensitive)
+                    if key_term.lower() not in content.lower():
+                        violations.append(rule)
+            
+            # Handle other patterns (e.g., "Completely missing dependencies")
+            else:
+                # Extract key terms and check
+                key_terms = re.findall(r'\b\w+\b', rule_lower)
+                # Skip common words
+                skip_words = {"missing", "no", "completely", "unclear", "not", "the", "a", "an"}
+                key_terms = [t for t in key_terms if t not in skip_words]
+                
+                if key_terms:
+                    # Check if any key term appears
+                    found = False
+                    for term in key_terms:
+                        if term in content.lower():
+                            found = True
+                            break
+                    if not found:
+                        violations.append(rule)
+        
+        return {
+            "auto_fail_passed": len(violations) == 0,
+            "auto_fail_violations": violations
         }
     
     def check_quality_for_type(
@@ -240,7 +422,7 @@ class DocumentTypeQualityChecker:
             weights: Custom weights for overall score calculation
             
         Returns:
-            Comprehensive quality report
+            Comprehensive quality report with auto_fail checks
         """
         # Get requirements for this document type
         requirements = self.get_requirements_for_type(document_type)
@@ -255,9 +437,26 @@ class DocumentTypeQualityChecker:
         # Run quality check
         result = checker.check_quality(content, weights=weights)
         
-        # Add document type info to result
+        # Check auto_fail rules
+        auto_fail_rules = requirements.get("auto_fail", [])
+        if auto_fail_rules:
+            auto_fail_result = self._check_auto_fail(content, auto_fail_rules)
+            result["auto_fail"] = auto_fail_result
+            
+            # If auto_fail, mark overall as failed regardless of score
+            if not auto_fail_result["auto_fail_passed"]:
+                result["passed"] = False
+                result["overall_score"] = min(result.get("overall_score", 100), 40)  # Cap at 40 if auto-fail
+                logger.warning(
+                    f"Document {document_type} auto-failed due to: {auto_fail_result['auto_fail_violations']}"
+                )
+        
+        # Add document type info and additional metadata to result
         result["document_type"] = document_type
         result["requirements"] = requirements
+        result["llm_focus"] = requirements.get("llm_focus", [])
+        result["optional_sections"] = requirements.get("optional_sections", [])
+        result["readability_target"] = requirements.get("readability_target", "50-70")
         
         return result
     
