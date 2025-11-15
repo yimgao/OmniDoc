@@ -111,12 +111,25 @@ pnpm dev  # or npm run dev
 
 All documentation is in the project root:
 
+### Core Documentation
 - **[BACKEND.md](BACKEND.md)** - Backend setup and API documentation
 - **[FRONTEND.md](FRONTEND.md)** - Frontend development guide
+- **[SECURITY.md](SECURITY.md)** - Security guide and best practices
+- **[MAINTENANCE.md](MAINTENANCE.md)** - Maintenance and monitoring guide
+
+### Deployment Documentation
 - **[README_PRODUCTION.md](README_PRODUCTION.md)** - Production deployment guide
 - **[PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)** - Detailed production setup
-- **[docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md)** - Quality scoring system documentation
+- **[ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md)** - Oracle Cloud Free Tier deployment
+- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Pre-deployment checklist
+- **[DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md)** - Deployment strategy and recommendations
+
+### Development & Improvement
 - **[DOCS_INDEX.md](DOCS_INDEX.md)** - Documentation index and quick reference
+- **[UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md)** - UI improvement roadmap (25 improvements)
+- **[IMPROVEMENTS.md](IMPROVEMENTS.md)** - Code improvement recommendations
+- **[docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md)** - Quality scoring system documentation
+- **[DOCUMENT_DEPENDENCIES.md](DOCUMENT_DEPENDENCIES.md)** - Document dependency reference
 
 ## 🏗️ Architecture
 
@@ -356,7 +369,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Need Help?** Check out:
-- [Backend Documentation](BACKEND.md)
-- [Frontend Documentation](FRONTEND.md)
-- [Production Setup](PRODUCTION_SETUP.md)
+- [Documentation Index](DOCS_INDEX.md) - Find what you need quickly
+- [Backend Documentation](BACKEND.md) - API and architecture
+- [Frontend Documentation](FRONTEND.md) - UI development
+- [Production Setup](PRODUCTION_SETUP.md) - Deployment guide
+- [Deployment Strategy](DEPLOYMENT_STRATEGY.md) - When to deploy vs. update
+- [UI Improvements](UI_IMPROVEMENTS.md) - UI enhancement roadmap
 - [API Documentation](http://localhost:8000/docs) (when server is running)

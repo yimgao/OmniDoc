@@ -85,6 +85,22 @@ All documentation is now in the project root for easy access:
   - Performance optimizations
   - Security improvements
 
+### UI Improvements
+- **[UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md)** - UI improvement roadmap
+  - 25 comprehensive UI improvements
+  - Based on generated documentation (UI Style Guide, Mockups, etc.)
+  - Organized by priority (High, Medium, Low)
+  - Phased implementation plan (6 phases)
+  - Color palette, typography, accessibility, and more
+
+### Deployment Strategy
+- **[DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md)** - Deployment strategy guide
+  - When to deploy vs. when to update UI first
+  - Critical fixes before deployment
+  - Phased improvement timeline
+  - Post-deployment prioritization
+  - Best practices for iterative development
+
 ### Quality Assurance
 - **[docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md)** - Quality scoring system
   - How quality scores are calculated
@@ -107,11 +123,18 @@ All documentation is now in the project root for easy access:
 4. Code examples in the main README
 
 ### For DevOps/Deployment
-1. [README_PRODUCTION.md](README_PRODUCTION.md) - Overview and architecture
-2. [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) - Detailed setup steps
-3. [ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md) - Oracle Cloud deployment
-4. [SECURITY.md](SECURITY.md) - Security configuration
-5. [MAINTENANCE.md](MAINTENANCE.md) - Maintenance procedures
+1. [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) - **Start here** - Deployment strategy
+2. [README_PRODUCTION.md](README_PRODUCTION.md) - Overview and architecture
+3. [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) - Detailed setup steps
+4. [ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md) - Oracle Cloud deployment
+5. [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) - Pre-deployment checklist
+6. [SECURITY.md](SECURITY.md) - Security configuration
+7. [MAINTENANCE.md](MAINTENANCE.md) - Maintenance procedures
+
+### For UI/UX Development
+1. [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) - Complete UI improvement roadmap
+2. [FRONTEND.md](FRONTEND.md) - Frontend architecture and components
+3. [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) - When to implement UI improvements
 
 ## 🔍 Finding Information
 
@@ -119,7 +142,8 @@ All documentation is now in the project root for easy access:
 - **Install OmniDoc**: See [README.md - Quick Start](README.md#-quick-start)
 - **Configure the backend**: See [BACKEND.md](BACKEND.md)
 - **Understand the frontend**: See [FRONTEND.md](FRONTEND.md)
-- **Deploy to production**: See [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) or [ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md)
+- **Deploy to production**: See [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) first, then [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) or [ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md)
+- **Improve the UI**: See [UI_IMPROVEMENTS.md](UI_IMPROVEMENTS.md) - Complete roadmap with 25 improvements
 - **Configure security**: See [SECURITY.md](SECURITY.md)
 - **Maintain the system**: See [MAINTENANCE.md](MAINTENANCE.md)
 - **Understand the architecture**: See [README.md - Architecture](README.md#-architecture)
@@ -127,6 +151,7 @@ All documentation is now in the project root for easy access:
 - **Use the API**: See [BACKEND.md - API Endpoints](BACKEND.md#-api-endpoints)
 - **Understand quality scoring**: See [docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md)
 - **Customize quality rules**: See [docs/QUALITY_SCORING.md - Configuration](docs/QUALITY_SCORING.md#configuration) and `src/config/quality_rules.json`
+- **Plan deployment strategy**: See [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) - When to deploy vs. update UI
 
 ## 📝 Document Status
 

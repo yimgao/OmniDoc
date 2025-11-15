@@ -593,4 +593,7 @@ redis-cli -a $REDIS_PASSWORD --scan --pattern "cache:*" | xargs redis-cli -a $RE
 - [Redis Administration](https://redis.io/docs/management/)
 - [Systemd Service Management](https://www.freedesktop.org/software/systemd/man/systemd.service.html)
 - [PM2 Documentation](https://pm2.keymetrics.io/docs/usage/quick-start/)
+- [Deployment Strategy](DEPLOYMENT_STRATEGY.md) - Maintenance considerations
+- [Production Setup](PRODUCTION_SETUP.md) - Production maintenance procedures
+- [Security Guide](SECURITY.md) - Security monitoring
 

@@ -199,3 +199,10 @@ If you discover a security vulnerability, please:
 2. Email security concerns to the maintainers
 3. Provide detailed information about the vulnerability
 4. Allow time for the issue to be addressed before disclosure
+
+## 📚 Additional Resources
+
+- [Deployment Strategy](DEPLOYMENT_STRATEGY.md) - Security considerations in deployment
+- [Production Setup](PRODUCTION_SETUP.md) - Production security configuration
+- [Backend Documentation](BACKEND.md) - Backend security implementation
+- [Maintenance Guide](MAINTENANCE.md) - Security monitoring and maintenance

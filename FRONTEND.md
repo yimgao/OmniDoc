@@ -50,10 +50,14 @@ frontend/
 │   ├── Footer.tsx           # Footer
 │   ├── HeroSection.tsx      # Hero section
 │   ├── HowItWorks.tsx       # How it works section
-│   ├── DocumentSelector.tsx # Document selection
+│   ├── TemplateSelector.tsx # Document template selection
+│   ├── OptionsSelector.tsx  # View/organization mode selector
+│   ├── DocumentSelector.tsx # Document selection (by category/level)
+│   ├── PlaceholdersAndVanishInput.tsx # Input with dynamic placeholders
 │   ├── ProgressTimeline.tsx # Progress display
 │   ├── GeneratingAnimation.tsx
-│   └── DocumentViewer.tsx   # Document viewer
+│   ├── DocumentViewer.tsx   # Document viewer
+│   └── ErrorBoundary.tsx    # Error boundary component
 ├── lib/                      # Utilities
 │   ├── api.ts               # API client
 │   ├── i18n.ts              # Internationalization
@@ -113,6 +117,44 @@ Global navigation with language selector:
 - Language dropdown (en, zh, ja, ko, es)
 - Responsive design
 
+### TemplateSelector
+
+Document template selection (preset combinations):
+
+```tsx
+<TemplateSelector
+  selectedDocuments={selected}
+  onSelectionChange={setSelected}
+/>
+```
+
+**Features:**
+- 9 preset templates (Developer, PM, Founder, etc.)
+- One-click template application
+- Visual template cards with icons
+- Multi-language support
+
+### OptionsSelector
+
+View and organization mode selector:
+
+```tsx
+<OptionsSelector
+  selectedDocuments={selected}
+  onSelectionChange={setSelected}
+  viewMode={viewMode}
+  onViewModeChange={setViewMode}
+  organizationMode={organizationMode}
+  onOrganizationModeChange={setOrganizationMode}
+/>
+```
+
+**Features:**
+- Collapsible interface
+- View modes: All, Team, Solo
+- Organization modes: Category, Level
+- Contains DocumentSelector when expanded
+
 ### DocumentSelector
 
 Document selection with filtering:
@@ -121,15 +163,38 @@ Document selection with filtering:
 <DocumentSelector
   selectedDocuments={selected}
   onSelectionChange={setSelected}
+  viewMode={viewMode}
+  organizationMode={organizationMode}
 />
 ```
 
 **Features:**
 - View modes: All, Team, Solo
-- Level-based organization
+- Organization: Category or Level
 - Dependency display
 - Priority indicators
 - Multi-language support
+
+### PlaceholdersAndVanishInput
+
+Input component with dynamic placeholders (Aceternity UI):
+
+```tsx
+<PlaceholdersAndVanishInput
+  placeholders={placeholders}
+  value={userIdea}
+  onChange={handleChange}
+  onSubmit={handleSubmit}
+  disabled={isSubmitting}
+/>
+```
+
+**Features:**
+- Rotating placeholders based on language
+- Vanish animation on submit
+- Send button inside input box
+- Character limit (5000 chars)
+- Multi-language placeholders
 
 ### ProgressTimeline
 
@@ -256,9 +321,11 @@ const { status, error } = useProjectStatus(projectId);
 
 ### 1. Document Selection
 
+- **Template Selection**: 9 preset templates for common use cases
 - **View Modes**: All, Team, Solo
+- **Organization**: By category or by level
 - **Filtering**: By level, priority, stage
-- **Dependencies**: Visual dependency display
+- **Dependencies**: Visual dependency display with smart recommendations
 - **Persistence**: LocalStorage for selections
 
 ### 2. Real-time Updates
@@ -379,9 +446,22 @@ pnpm install
 pnpm build
 ```
 
+## 🎨 UI Improvements
+
+A comprehensive UI improvement roadmap is available:
+- **[UI_IMPROVEMENTS.md](../UI_IMPROVEMENTS.md)** - 25 UI improvements organized by priority
+  - Color palette implementation
+  - Typography system
+  - Component standardization
+  - Accessibility improvements
+  - Onboarding flow
+  - And more...
+
 ## 📚 Additional Resources
 
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Tailwind CSS](https://tailwindcss.com/docs)
 - [React Documentation](https://react.dev)
+- [UI Improvements Roadmap](../UI_IMPROVEMENTS.md)
+- [Deployment Strategy](../DEPLOYMENT_STRATEGY.md)
 

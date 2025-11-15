@@ -624,6 +624,7 @@ See [docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md) for detailed documentatio
 ## 📚 Additional Resources
 
 - [Production Deployment](PRODUCTION_SETUP.md)
+- [Deployment Strategy](DEPLOYMENT_STRATEGY.md) - When to deploy vs. update
 - [Security Guide](SECURITY.md)
 - [Maintenance Guide](MAINTENANCE.md)
 - [API Documentation](http://localhost:8000/docs) (when server is running)
