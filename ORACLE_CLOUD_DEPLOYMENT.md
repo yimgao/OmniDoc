@@ -137,7 +137,7 @@ JWT_SECRET_KEY=$(openssl rand -hex 32)
 ENVIRONMENT=prod
 
 # CORS (Update with your domain)
-ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+ALLOWED_ORIGINS=https://omnidoc.info,https://www.omnidoc.info
 
 # Backend
 BACKEND_HOST=0.0.0.0
@@ -162,7 +162,7 @@ Add configuration:
 # Frontend (Next.js)
 server {
     listen 80;
-    server_name yourdomain.com www.yourdomain.com;
+    server_name omnidoc.info www.omnidoc.info;
 
     location / {
         proxy_pass http://localhost:3000;
@@ -180,7 +180,7 @@ server {
 # Backend API (FastAPI)
 server {
     listen 80;
-    server_name api.yourdomain.com;
+    server_name api.omnidoc.info;
 
     location / {
         proxy_pass http://localhost:8000;
@@ -220,7 +220,7 @@ sudo systemctl enable nginx
 
 ```bash
 sudo apt-get install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com -d api.yourdomain.com
+sudo certbot --nginx -d omnidoc.info -d www.omnidoc.info -d api.omnidoc.info
 ```
 
 Auto-renewal is configured automatically.
@@ -353,7 +353,7 @@ Update `.env` for production:
 
 ```bash
 # In frontend/.env.local
-NEXT_PUBLIC_API_URL=https://api.yourdomain.com
+NEXT_PUBLIC_API_URL=https://api.omnidoc.info
 ```
 
 ### 12. Setup Logging

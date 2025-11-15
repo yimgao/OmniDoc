@@ -50,6 +50,11 @@ All documentation is now in the project root for easy access:
   - Post-deployment verification
   - Quick reference commands
 
+- **[PRODUCTION_DOMAIN.md](PRODUCTION_DOMAIN.md)** - Production domain configuration
+  - Domain: `https://omnidoc.info`
+  - API: `https://api.omnidoc.info`
+  - DNS and SSL configuration
+
 ### Frontend Documentation
 - **[FRONTEND.md](FRONTEND.md)** - Complete frontend guide
   - Next.js architecture

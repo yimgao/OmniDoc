@@ -104,8 +104,12 @@ pnpm dev  # or npm run dev
 
 ### 5. Use the Application
 
-- **Web Interface**: Visit `http://localhost:3000`
-- **API**: Visit `http://localhost:8000/docs` for interactive API documentation
+- **Web Interface**: Visit `http://localhost:3000` (development) or `https://omnidoc.info` (production)
+- **API**: Visit `http://localhost:8000/docs` for interactive API documentation (development) or `https://api.omnidoc.info/docs` (production)
+
+**Production URLs:**
+- Frontend: `https://omnidoc.info`
+- API: `https://api.omnidoc.info`
 
 ## 📚 Documentation
 

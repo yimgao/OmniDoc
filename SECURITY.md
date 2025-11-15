@@ -65,10 +65,12 @@ async def create_project(...):
 In production, restrict to specific domains:
 ```python
 ALLOWED_ORIGINS = [
-    "https://yourdomain.com",
-    "https://www.yourdomain.com",
+    "https://omnidoc.info",
+    "https://www.omnidoc.info",
 ]
 ```
+
+**Production Domain:** `https://omnidoc.info/`
 
 ## Database Security
 

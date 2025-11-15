@@ -60,7 +60,7 @@ JWT_SECRET_KEY=generate-strong-random-key-here
 ENVIRONMENT=prod
 
 # CORS
-ALLOWED_ORIGINS=https://yourdomain.com
+ALLOWED_ORIGINS=https://omnidoc.info,https://www.omnidoc.info
 ```
 
 ### 5. Install Dependencies
