@@ -94,9 +94,9 @@ export default function ProjectResultsPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-gray-50">
+    <div className="flex h-screen flex-col bg-gray-50 overflow-hidden">
       {/* Header */}
-      <div className="border-b border-gray-200 bg-white px-6 py-4">
+      <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
@@ -131,7 +131,7 @@ export default function ProjectResultsPage() {
       </div>
 
       {/* Document Viewer */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {documents.length > 0 ? (
           <DocumentViewer documents={documents} projectId={projectId} />
         ) : (

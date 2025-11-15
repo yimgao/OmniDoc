@@ -36,7 +36,7 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-gray-200 bg-white shadow-sm">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-3 py-3 sm:px-4 lg:px-6">
         {/* Logo & Title - Leftmost */}
         <div className="flex-shrink-0">
           <Link
@@ -70,7 +70,7 @@ export default function Header() {
         <nav className="flex flex-shrink-0 items-center space-x-4">
           {/* GitHub Link */}
           <a
-            href="https://github.com"
+            href="https://github.com/yimgao"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"

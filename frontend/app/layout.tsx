@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,9 +31,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}
         suppressHydrationWarning
       >
-        <Header />
-        <main className="flex-grow">{children}</main>
-        <Footer />
+        <ErrorBoundary>
+          <Header />
+          <main className="grow">{children}</main>
+          <Footer />
+        </ErrorBoundary>
       </body>
     </html>
   );
