@@ -14,6 +14,29 @@ OmniDoc is an intelligent documentation generator that takes your project idea a
 
 All generated from a simple description of your project idea!
 
+### ✨ Key Features
+
+- **🤖 Multi-Agent Collaboration**: Specialized AI agents work together to generate comprehensive documentation
+- **✅ Quality Assurance**: Automatic quality review and improvement workflow ensures high-quality output
+- **📊 Configurable Quality Rules**: Document-type-specific quality rules via `quality_rules.json`
+- **🔄 Context Sharing**: Agents share project context for consistent, coherent documentation
+- **⚡ Real-time Updates**: WebSocket-based progress tracking during document generation
+- **🌍 Multi-language Support**: Frontend supports English, Chinese, Japanese, Korean, and Spanish
+
+## 📋 Table of Contents
+
+- [What is OmniDoc?](#-what-is-omnidoc)
+- [Quick Start](#-quick-start)
+- [Testing](#testing)
+- [Monitoring](#monitoring)
+- [Features](#-features)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Usage Examples](#-usage-examples)
+- [Configuration](#-configuration)
+- [Troubleshooting](#-troubleshooting)
+- [Documentation](#-documentation)
+
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
@@ -88,9 +111,11 @@ pnpm dev  # or npm run dev
 
 All documentation is in the project root:
 
-- **[README_BACKEND.md](README_BACKEND.md)** - Backend setup and API documentation
+- **[BACKEND.md](BACKEND.md)** - Backend setup and API documentation
+- **[FRONTEND.md](FRONTEND.md)** - Frontend development guide
 - **[README_PRODUCTION.md](README_PRODUCTION.md)** - Production deployment guide
 - **[PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)** - Detailed production setup
+- **[docs/QUALITY_SCORING.md](docs/QUALITY_SCORING.md)** - Quality scoring system documentation
 - **[DOCS_INDEX.md](DOCS_INDEX.md)** - Documentation index and quick reference
 
 ## 🏗️ Architecture
@@ -121,7 +146,11 @@ All documentation is in the project root:
 ### 🤖 Multi-Agent System
 - **21+ Specialized Agents**: Each agent specializes in a specific document type
 - **Intelligent Workflow**: Sequential approval for strategic docs, parallel execution for technical docs
-- **Quality Assurance**: Automatic quality checks and iterative improvement
+- **Context Sharing**: Agents share project context via ContextManager for consistent documentation
+- **Quality Assurance**: Automatic quality review and improvement workflow
+  - Quality Reviewer Agent checks each document (score 1-10)
+  - Document Improver Agent enhances documents below quality threshold (< 7.0)
+  - Configurable quality rules via `src/config/quality_rules.json`
 
 ### 🔄 Production-Ready Infrastructure
 - **PostgreSQL Database**: Robust, scalable database (migrated from SQLite)
@@ -286,7 +315,7 @@ celery -A src.tasks.celery_app inspect active
 celery -A src.tasks.celery_app worker --loglevel=debug
 ```
 
-See [README_BACKEND.md](README_BACKEND.md) and [docs/PRODUCTION_SETUP.md](docs/PRODUCTION_SETUP.md) for more troubleshooting tips.
+See [BACKEND.md](BACKEND.md) and [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) for more troubleshooting tips.
 
 ## 📦 Dependencies
 
@@ -327,6 +356,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ---
 
 **Need Help?** Check out:
-- [Backend Documentation](README_BACKEND.md)
-- [Production Setup](docs/PRODUCTION_SETUP.md)
+- [Backend Documentation](BACKEND.md)
+- [Frontend Documentation](FRONTEND.md)
+- [Production Setup](PRODUCTION_SETUP.md)
 - [API Documentation](http://localhost:8000/docs) (when server is running)

@@ -143,6 +143,6 @@ celery -A src.tasks.celery_app worker --loglevel=debug
 ## 📚 Additional Resources
 
 - [Main README](README.md)
-- [Backend Documentation](README_BACKEND.md)
+- [Backend Documentation](BACKEND.md)
 - [Production Guide](README_PRODUCTION.md)
 - [Documentation Index](DOCS_INDEX.md)

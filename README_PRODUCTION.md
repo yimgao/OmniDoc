@@ -231,6 +231,6 @@ Logs are written to `logs/` directory. Configure log rotation in production.
 ## 📚 Additional Resources
 
 - **Main README**: [README.md](README.md)
-- **Backend Setup**: [README_BACKEND.md](README_BACKEND.md)
+- **Backend Setup**: [BACKEND.md](BACKEND.md)
 - **Detailed Production Guide**: [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)
 - **Documentation Index**: [DOCS_INDEX.md](DOCS_INDEX.md)
