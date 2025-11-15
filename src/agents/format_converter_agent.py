@@ -691,9 +691,12 @@ class FormatConverterAgent(BaseAgent):
             # If subdirectory is provided, create path with subdirectory
             if subdirectory:
                 output_filename = f"{subdirectory}/{output_filename}"
-            file_path = self.file_manager.write_file(output_filename, html_content)
-            logger.info(f"Format conversion completed: HTML -> {file_path}")
-            return file_path
+            # Generate virtual file path for reference (not used for actual file storage)
+            virtual_path = f"docs/{output_filename}"
+            logger.info(f"Format conversion completed: HTML -> {virtual_path} (saved to database)")
+            # Note: Format converter output is typically not saved to agent_outputs table
+            # as it's a conversion of existing documents, not a new document generation
+            return virtual_path  # Return virtual path for compatibility
         
         elif output_format.lower() == 'pdf':
             html_content = self.markdown_to_html(markdown_content)

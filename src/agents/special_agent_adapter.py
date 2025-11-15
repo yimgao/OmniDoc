@@ -79,33 +79,37 @@ class SpecialAgentAdapter:
             logger.error("Failed to generate document %s: %s", self.definition.id, exc, exc_info=True)
             raise
 
-        file_path = self.file_manager.write_file(output_rel_path, content)
+        # Generate virtual file path for reference (not used for actual file storage)
+        virtual_path = f"docs/{output_rel_path}"
 
-        # If this is RequirementsAnalyst and we have context_manager, save to context
-        if isinstance(self.agent, RequirementsAnalyst) and self.context_manager and self.project_id:
+        # Save to database via context_manager
+        if self.context_manager and self.project_id:
             try:
-                # RequirementsAnalyst has a generate_and_save that handles context saving
-                # But we've already generated, so we'll just save to context manually
                 from src.context.shared_context import AgentType, DocumentStatus, AgentOutput
-
-                output = AgentOutput(
-                    agent_type=AgentType.REQUIREMENTS_ANALYST,
-                    document_type="requirements",
-                    content=content,
-                    file_path=file_path,
-                    status=DocumentStatus.COMPLETE,
-                )
-                self.context_manager.save_agent_output(self.project_id, output)
+                
+                # Determine agent type from definition
+                agent_type = AgentType.REQUIREMENTS_ANALYST if isinstance(self.agent, RequirementsAnalyst) else None
+                
+                if agent_type:
+                    output = AgentOutput(
+                        agent_type=agent_type,
+                        document_type=self.definition.id,
+                        content=content,
+                        file_path=virtual_path,  # Virtual path for reference only
+                        status=DocumentStatus.COMPLETE,
+                    )
+                    self.context_manager.save_agent_output(self.project_id, output)
+                    logger.info(f"✅ Document {self.definition.id} saved to database")
 
                 # Also parse and save requirements if possible
-                if hasattr(self.agent, "parser") and hasattr(self.agent, "_save_to_context"):
+                if isinstance(self.agent, RequirementsAnalyst) and hasattr(self.agent, "parser") and hasattr(self.agent, "_save_to_context"):
                     # Create a temporary RequirementsDocument-like object
                     # The agent's _save_to_context will handle parsing
                     self.agent.project_id = self.project_id
                     self.agent.context_manager = self.context_manager
-                    self.agent._save_to_context(content, file_path, user_idea)
+                    self.agent._save_to_context(content, virtual_path, user_idea)
             except Exception as exc:
-                logger.warning("Failed to save requirements to context: %s", exc)
+                logger.warning("Failed to save to database: %s", exc)
 
         return {
             "id": self.definition.id,

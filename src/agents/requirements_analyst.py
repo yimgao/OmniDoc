@@ -129,21 +129,23 @@ class RequirementsAnalyst(BaseAgent):
         requirements_doc = self.generate(user_idea)
         logger.debug(f"Requirements document generated (length: {len(requirements_doc)} characters)")
         
-        # Save to file
+        # Save to database (not to file)
         try:
-            file_path = self.file_manager.write_file(output_filename, requirements_doc)
-            file_size = self.file_manager.get_file_size(output_filename)
-            logger.info(f"Requirements document saved: {file_path} (size: {file_size} bytes)")
-            logger.info("✅ File written successfully to {{file_path}}")
+            # Generate virtual file path for reference (not used for actual file storage)
+            virtual_path = f"docs/{output_filename}"
+            logger.info(f"Requirements document saving to database (virtual path: {virtual_path})")
             
-            # Save to context if available (with improved parsing)
+            # Save to context/database (with improved parsing)
             if self.project_id and self.context_manager:
-                self._save_to_context(requirements_doc, file_path, user_idea)
+                self._save_to_context(requirements_doc, virtual_path, user_idea)
+                logger.info("✅ Requirements document saved to database")
+            else:
+                logger.warning("⚠️  No context manager available, document not saved to database")
             
-            return file_path
+            return virtual_path  # Return virtual path for compatibility
         except Exception as e:
-            logger.error(f"Error writing requirements file: {str(e)}", exc_info=True)
-            logger.error("❌ Error writing file: {{e}}")
+            logger.error(f"Error saving requirements to database: {str(e)}", exc_info=True)
+            logger.error("❌ Error saving to database: {{e}}")
             raise
     
     def _save_to_context(self, requirements_doc: str, file_path: str, user_idea: str):

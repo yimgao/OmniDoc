@@ -286,24 +286,27 @@ Start with the documentation content:"""
         # Generate documentation
         doc_content = self.generate_code_documentation(code_analysis, existing_docs)
         
-        # Save to file
-        file_path = self.file_manager.write_file(output_filename, doc_content)
-        logger.info(f"Code-based documentation saved to: {file_path}")
+        # Generate virtual file path for reference (not used for actual file storage)
+        virtual_path = f"docs/{output_filename}"
+        logger.info(f"Code-based documentation saving to database (virtual path: {virtual_path})")
         
-        # Save to context
+        # Save to database
         if project_id and context_manager:
             try:
                 output = AgentOutput(
                     agent_type=AgentType.API_DOCUMENTATION,  # Update API docs
                     document_type="code_analysis_docs",
                     content=doc_content,
-                    file_path=file_path,
+                    file_path=virtual_path,  # Virtual path for reference only
                     status=DocumentStatus.COMPLETE,
                     generated_at=datetime.now()
                 )
                 context_manager.save_agent_output(project_id, output)
+                logger.info("✅ Code-based documentation saved to database")
             except Exception as e:
-                logger.warning(f"Could not save to context: {e}")
+                logger.warning(f"Could not save to database: {e}")
+        else:
+            logger.warning("⚠️  No context manager available, document not saved")
         
-        return file_path
+        return virtual_path  # Return virtual path for compatibility
 

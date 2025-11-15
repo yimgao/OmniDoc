@@ -69,8 +69,8 @@ class AgentOutput:
     """Output from a documentation agent"""
     agent_type: AgentType
     document_type: str  # e.g., "project_plan", "technical_spec"
-    content: str  # Markdown content
-    file_path: str
+    content: str  # Markdown content (stored in database)
+    file_path: Optional[str] = None  # Optional virtual path for reference (not used for file storage)
     quality_score: Optional[float] = None
     status: DocumentStatus = DocumentStatus.PENDING
     generated_at: Optional[datetime] = None

@@ -479,11 +479,31 @@ Issues Identified:
                 # Update document result with improved content
                 if improved_content and improved_content != original_content:
                     document_result["content"] = improved_content
-                    # Save improved content to file
-                    from src.utils.file_manager import FileManager
-                    file_manager = FileManager(base_dir=str(self.output_root))
-                    file_manager.write_file(output_rel_path, improved_content)
-                    logger.info(f"✅ Document {document_id} improved and saved")
+                    # Update content in database (not in file)
+                    # Save improved content to database
+                    try:
+                        from src.context.shared_context import AgentType, DocumentStatus, AgentOutput
+                        # Try to determine agent_type from document_id
+                        agent_type = None
+                        try:
+                            agent_type = AgentType(document_id)
+                        except ValueError:
+                            # Not a standard AgentType, use document_type
+                            pass
+                        
+                        if agent_type:
+                            output = AgentOutput(
+                                agent_type=agent_type,
+                                document_type=document_id,
+                                content=improved_content,
+                                file_path=document_result.get("file_path"),  # Virtual path
+                                status=DocumentStatus.COMPLETE,
+                                quality_score=document_result.get("quality_score"),
+                            )
+                            self.context_manager.save_agent_output(project_id, output)
+                            logger.info(f"✅ Document {document_id} improved and updated in database")
+                    except Exception as e:
+                        logger.warning(f"Could not update improved document in database: {e}")
 
             generated_docs[document_id] = document_result
             completed.append(document_id)

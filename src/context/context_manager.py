@@ -5,7 +5,7 @@ Manages shared context database for agent collaboration
 import os
 import json
 import threading
-from pathlib import Path
+# Path removed - content is stored in database, not files
 from typing import Optional, Dict, List
 from datetime import datetime
 from contextlib import contextmanager
@@ -145,7 +145,7 @@ class ContextManager:
                     agent_type VARCHAR(100) NOT NULL,
                     document_type VARCHAR(255) NOT NULL,
                     content TEXT NOT NULL,
-                    file_path TEXT NOT NULL,
+                    file_path TEXT,  -- Optional virtual path (for reference only, not used for file storage)
                     quality_score REAL,
                     status VARCHAR(50) NOT NULL,
                     dependencies TEXT,  -- JSON array
@@ -157,6 +157,16 @@ class ContextManager:
                     FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
                 )
             """)
+            
+            # Migrate existing table: make file_path nullable if it's not already
+            try:
+                cursor.execute("""
+                    ALTER TABLE agent_outputs 
+                    ALTER COLUMN file_path DROP NOT NULL
+                """)
+            except Exception:
+                # Column might already be nullable or migration not needed
+                pass
             
             # Cross-references table
             cursor.execute("""
@@ -333,6 +343,8 @@ class ContextManager:
                     generated_at = datetime.fromisoformat(generated_at)
                 
                 # Use INSERT ... ON CONFLICT for upsert
+                # file_path is optional - can be None if storing only in database
+                file_path = output.file_path if output.file_path else None
                 cursor.execute("""
                     INSERT INTO agent_outputs (
                         output_id, project_id, agent_type, document_type,
@@ -353,7 +365,7 @@ class ContextManager:
                     output.agent_type.value,
                     output.document_type,
                     output.content,
-                    output.file_path,
+                    file_path,
                     output.quality_score,
                     output.status.value,
                     json.dumps(dependencies),
@@ -851,7 +863,6 @@ class ContextManager:
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 now = datetime.now()
-                output_id = f"{project_id}_{agent_type.value}"
                 
                 # Update the latest version of the document
                 cursor.execute("""
@@ -1046,11 +1057,24 @@ class ContextManager:
                 continue
 
             item = dict(entry)
-            file_path = item.get("file_path")
-            if include_content and file_path:
+            # Content is stored in database, not in files
+            # If content is not in the entry, try to get it from agent_outputs table
+            if include_content and not item.get("content"):
                 try:
-                    item["content"] = Path(file_path).read_text(encoding="utf-8")
-                except OSError:
+                    conn = self._get_connection()
+                    cursor = conn.cursor(cursor_factory=RealDictCursor)
+                    cursor.execute("""
+                        SELECT content FROM agent_outputs 
+                        WHERE project_id = %s AND document_type = %s
+                        ORDER BY version DESC LIMIT 1
+                    """, (project_id, doc_id))
+                    row = cursor.fetchone()
+                    cursor.close()
+                    if row:
+                        item["content"] = row["content"]
+                    else:
+                        item["content"] = None
+                except Exception:
                     item["content"] = None
             documents_map[doc_id] = item
 

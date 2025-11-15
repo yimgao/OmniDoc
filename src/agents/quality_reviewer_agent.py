@@ -153,24 +153,27 @@ class QualityReviewerAgent(BaseAgent):
         # Generate review report
         review_report = self.generate(all_documentation)
         
-        # Save to file
+        # Generate virtual file path for reference (not used for actual file storage)
+        virtual_path = f"docs/{output_filename}"
+        logger.info(f"Quality review report saving to database (virtual path: {virtual_path})")
+        
+        # Save to database
         try:
-            file_path = self.file_manager.write_file(output_filename, review_report)
-            file_size = self.file_manager.get_file_size(output_filename)
-            
-            # Save to context if available
             if project_id and context_manager:
                 output = AgentOutput(
                     agent_type=AgentType.QUALITY_REVIEWER,
                     document_type="quality_review",
                     content=review_report,
-                    file_path=file_path,
+                    file_path=virtual_path,  # Virtual path for reference only
                     status=DocumentStatus.COMPLETE,
                     generated_at=datetime.now()
                 )
                 context_manager.save_agent_output(project_id, output)
+                logger.info("✅ Quality review report saved to database")
+            else:
+                logger.warning("⚠️  No context manager available, review report not saved")
             
-            return file_path
+            return virtual_path  # Return virtual path for compatibility
         except Exception as e:
             raise
     

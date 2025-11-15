@@ -250,25 +250,54 @@ async def get_project_documents(
     completed_agents = parse_json_field(status_row.get("completed_agents"), default=[])
     completed_agents_set: Set[str] = set(completed_agents) if isinstance(completed_agents, list) else set()
 
+    # Get content from database instead of files
+    context_manager = request.app.state.context_manager
+    
     for doc_id, file_path in files.items():
         definition = get_document_by_id(doc_id)
         doc_name = definition.name if definition else doc_id.replace("_", " ").title()
         path_value = file_path.get("path") if isinstance(file_path, dict) else file_path
         content: Optional[str] = None
 
-        if isinstance(path_value, str) and Path(path_value).exists():
+        # Get content from database (agent_outputs table)
+        try:
+            # Try to get from agent_outputs by document_type
+            from src.context.shared_context import AgentType
+            # Map document_id to agent_type if possible
+            agent_type = None
             try:
-                content = Path(path_value).read_text(encoding="utf-8")
-            except OSError as exc:
-                logger.warning("Failed to read document %s at %s: %s", doc_id, path_value, exc)
+                agent_type = AgentType(doc_id)
+            except ValueError:
+                # Not a standard AgentType, try to find by document_type
+                pass
+            
+            if agent_type:
+                agent_output = context_manager.get_agent_output(project_id, agent_type)
+                if agent_output:
+                    content = agent_output.content
+            else:
+                # Try to find by document_type directly
+                conn = context_manager._get_connection()
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute("""
+                    SELECT content FROM agent_outputs 
+                    WHERE project_id = %s AND document_type = %s
+                    ORDER BY version DESC LIMIT 1
+                """, (project_id, doc_id))
+                row = cursor.fetchone()
+                cursor.close()
+                if row:
+                    content = row["content"]
+        except Exception as exc:
+            logger.warning("Failed to read document %s from database: %s", doc_id, exc)
 
         all_documents.append(
             GeneratedDocument(
                 id=doc_id,
                 name=doc_name,
                 status="complete" if doc_id in completed_agents_set else "pending",
-                file_path=path_value if isinstance(path_value, str) else None,
-                content=content,
+                file_path=path_value if isinstance(path_value, str) else None,  # Virtual path for reference
+                content=content,  # Content from database
             )
         )
 
@@ -368,17 +397,22 @@ async def download_document(request: Request, project_id: str, document_id: str)
         raise HTTPException(status_code=400, detail="Invalid document ID format.")
     
     document = await get_single_document(request, project_id, document_id)
-    if not document.file_path:
-        raise HTTPException(status_code=404, detail="Document file not found on disk.")
-
-    file_path = Path(document.file_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Document file not found on disk.")
-
-    return FileResponse(
-        path=file_path,
-        filename=file_path.name,
+    
+    # Content is stored in database, not in files
+    if not document.content:
+        raise HTTPException(status_code=404, detail="Document content not found.")
+    
+    # Generate filename from document type
+    filename = f"{document.name or document_id}.md"
+    
+    # Return content as file download (from database)
+    from fastapi.responses import Response
+    return Response(
+        content=document.content,
         media_type="text/markdown",
-        headers={"Content-Disposition": f'attachment; filename="{file_path.name}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": "text/markdown; charset=utf-8"
+        }
     )
 

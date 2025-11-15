@@ -267,18 +267,45 @@ class GenericDocumentAgent(BaseAgent):
             )
             raise
 
-        file_path = self.file_manager.write_file(output_rel_path, content)
+        # Generate virtual file path for reference (not used for actual file storage)
+        virtual_path = f"docs/{output_rel_path}"
         logger.debug(
-            "Document %s saved to %s [Project: %s]",
+            "Document %s saving to database (virtual path: %s) [Project: %s]",
             self.definition.id,
-            file_path,
+            virtual_path,
             project_id or "N/A"
         )
+        
+        # Save to database if context_manager is available
+        if project_id and self.context_manager:
+            try:
+                from src.context.shared_context import AgentType, DocumentStatus, AgentOutput
+                # Try to map document_id to AgentType
+                agent_type = None
+                try:
+                    agent_type = AgentType(self.definition.id)
+                except ValueError:
+                    # Not a standard AgentType, we'll save by document_type
+                    pass
+                
+                if agent_type:
+                    output = AgentOutput(
+                        agent_type=agent_type,
+                        document_type=self.definition.id,
+                        content=content,
+                        file_path=virtual_path,  # Virtual path for reference only
+                        status=DocumentStatus.COMPLETE,
+                        generated_at=datetime.now()
+                    )
+                    self.context_manager.save_agent_output(project_id, output)
+                    logger.debug(f"✅ Document {self.definition.id} saved to database")
+            except Exception as e:
+                logger.warning(f"Could not save document {self.definition.id} to database: {e}")
         
         return {
             "id": self.definition.id,
             "name": self.definition.name,
-            "file_path": file_path,
+            "file_path": virtual_path,  # Virtual path for reference only
             "content": content,
             "generated_at": datetime.now().isoformat(),
         }
