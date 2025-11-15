@@ -46,7 +46,7 @@ All generated from a simple description of your project idea!
 - **Python 3.9+**
 - **Node.js 18+** (for frontend)
 - **PostgreSQL** (database) - **Recommended: Use [Neon](https://neon.tech) (free managed PostgreSQL)** or local PostgreSQL
-- **Redis** (for task queue and caching)
+- **Redis** (for task queue and caching) - **Recommended: Use [Upstash](https://upstash.com) (free managed Redis)** or local Redis
 
 ### 2. Installation
 

@@ -25,8 +25,10 @@ APP_USER=$(whoami)
 
 echo -e "${GREEN}Step 1: Installing system dependencies...${NC}"
 sudo apt-get update
-# Note: PostgreSQL is NOT installed - we use Neon (managed PostgreSQL)
-sudo apt-get install -y git curl wget build-essential redis-server
+# Note: PostgreSQL and Redis are NOT installed - we use managed services
+# PostgreSQL: Neon (managed PostgreSQL)
+# Redis: Upstash (managed Redis)
+sudo apt-get install -y git curl wget build-essential
 
 echo -e "${GREEN}Step 2: Installing Node.js 18+...${NC}"
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
@@ -45,12 +47,33 @@ echo ""
 read -p "Enter your Neon DATABASE_URL (or press Enter to use production default): " NEON_DATABASE_URL
 NEON_DATABASE_URL=${NEON_DATABASE_URL:-"postgresql://neondb_owner:npg_wUg5P3SnCMcF@ep-divine-meadow-a4epnyhw-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"}
 
-echo -e "${GREEN}Step 5: Setting up Redis...${NC}"
-read -sp "Enter Redis password: " REDIS_PASSWORD
-echo
+echo -e "${GREEN}Step 5: Configuring Upstash Redis (Managed Redis)...${NC}"
+echo -e "${YELLOW}We'll use Upstash (https://upstash.com) for managed Redis.${NC}"
+echo -e "${YELLOW}This saves memory on your Oracle Cloud instance!${NC}"
+echo ""
+echo "Please get your Upstash Redis connection details:"
+echo "  1. Go to https://console.upstash.com"
+echo "  2. Create or select a Redis database"
+echo "  3. Copy the Redis URL (format: redis://default:password@endpoint:port)"
+echo ""
+# Build Redis URL from REST URL and token
+# Format: redis://default:token@hostname:6379
+read -p "Enter your Upstash Redis REST URL (or press Enter to use production default): " UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-"https://right-loon-30051.upstash.io"}
 
-sudo sed -i "s/# requirepass foobared/requirepass $REDIS_PASSWORD/" /etc/redis/redis.conf
-sudo systemctl restart redis-server
+read -p "Enter your Upstash Redis REST Token (or press Enter to use production default): " UPSTASH_REDIS_REST_TOKEN
+UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-"AXVjAAIncDJlNDY0OGUwNzdkMjc0M2U5OGE2Yzg4ZGUzYWU3YWVlZXAyMzAwNTE"}
+
+# Extract hostname from REST URL (remove https://)
+UPSTASH_HOST=$(echo "$UPSTASH_REDIS_REST_URL" | sed 's|https://||' | sed 's|http://||')
+# Build standard Redis URL for Celery
+UPSTASH_REDIS_URL="redis://default:${UPSTASH_REDIS_REST_TOKEN}@${UPSTASH_HOST}:6379"
+
+read -p "Enter your Upstash Redis REST URL (or press Enter to use production default): " UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL:-"https://right-loon-30051.upstash.io"}
+
+read -p "Enter your Upstash Redis REST Token (or press Enter to use production default): " UPSTASH_REDIS_REST_TOKEN
+UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN:-"AXVjAAIncDJlNDY0OGUwNzdkMjc0M2U5OGE2Yzg4ZGUzYWU3YWVlZXAyMzAwNTE"}
 
 echo -e "${GREEN}Step 6: Cloning repository...${NC}"
 if [ ! -d "$APP_DIR" ]; then
@@ -85,9 +108,15 @@ if [ ! -f .env ]; then
 DATABASE_URL=$DB_URL
 
 # =============================================================================
-# Redis Configuration (Local)
+# Redis Configuration (Upstash - Managed Redis)
 # =============================================================================
-REDIS_URL=redis://:$REDIS_PASSWORD@localhost:6379/0
+# Get your Redis URL from: https://console.upstash.com
+# Format: redis://default:password@endpoint:port
+REDIS_URL=$UPSTASH_REDIS_URL
+
+# Upstash REST API (for REST-based Redis operations if needed)
+UPSTASH_REDIS_REST_URL=$UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN=$UPSTASH_REDIS_REST_TOKEN
 
 # =============================================================================
 # Security Configuration
@@ -200,7 +229,7 @@ echo -e "${GREEN}Step 11: Creating systemd services...${NC}"
 sudo tee /etc/systemd/system/omnidoc-backend.service > /dev/null <<EOF
 [Unit]
 Description=OmniDoc Backend API
-After=network.target redis.service
+After=network.target
 
 [Service]
 Type=simple
@@ -219,7 +248,7 @@ EOF
 sudo tee /etc/systemd/system/omnidoc-celery.service > /dev/null <<EOF
 [Unit]
 Description=OmniDoc Celery Worker
-After=network.target redis.service
+After=network.target
 
 [Service]
 Type=simple
