@@ -55,10 +55,9 @@ Azure App Service has an **Always Free** tier (F1) that's not shown in your quot
    - **Subscription**: Your subscription
    - **Resource Group**: Create new or use existing
    - **Name**: `omnidoc-api` (or your preferred name)
-   - **Publish**: **Code** (recommended) or Container
-     - **Code**: Easier, Azure builds automatically
-     - **Container**: More control, requires Dockerfile
-     - See [Deployment Options](DEPLOYMENT_OPTIONS.md) for comparison
+   - **Publish**: **Container** (you chose this)
+     - Requires Dockerfile (already created)
+     - See [Azure Container Deployment Guide](AZURE_CONTAINER_DEPLOYMENT.md) for detailed steps
    - **Runtime stack**: Python 3.9 or 3.10
    - **Operating System**: Linux
    - **Region**: Choose closest to you
@@ -68,7 +67,43 @@ Azure App Service has an **Always Free** tier (F1) that's not shown in your quot
      - Or **Basic B1** if you need more resources (~$13/month)
 6. Click **Review + create** → **Create**
 
-### Step 2: Configure Environment Variables
+### Step 2: Set Up Azure Container Registry (ACR)
+
+1. **Create a resource** → **Container Registry**
+2. Configure:
+   ```
+   Registry name: omnidocregistry (or your preferred name)
+   SKU: Basic ($5/month) or Free (if available - 500MB storage)
+   ```
+3. Click **Create**
+4. Get access credentials: **Settings** → **Access keys**
+   - Username: `omnidocregistry`
+   - Password: Copy one of the passwords
+
+### Step 3: Build and Push Docker Images
+
+See [Azure Container Deployment Guide](AZURE_CONTAINER_DEPLOYMENT.md) for detailed steps.
+
+Quick version:
+```bash
+# Login
+az acr login --name omnidocregistry
+
+# Build and push
+docker build -t omnidocregistry.azurecr.io/omnidoc-backend:latest .
+docker push omnidocregistry.azurecr.io/omnidoc-backend:latest
+```
+
+### Step 4: Configure App Service for Container
+
+After creating App Service, go to **Deployment Center**:
+1. Select **Container Registry** → **Azure Container Registry**
+2. Select your registry: `omnidocregistry`
+3. Image: `omnidoc-backend`
+4. Tag: `latest`
+5. Click **Save**
+
+### Step 5: Configure Environment Variables
 
 1. Go to your App Service
 2. Navigate to **Configuration** → **Application settings**
@@ -123,7 +158,22 @@ Or if using Azure's default Python setup:
 python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000
 ```
 
-### Step 4: Deploy from GitHub
+### Step 7: Set Up Automatic Deployment (GitHub Actions)
+
+1. Go to GitHub repository → **Settings** → **Secrets and variables** → **Actions**
+2. Add secrets:
+   ```
+   AZURE_REGISTRY: omnidocregistry.azurecr.io
+   AZURE_REGISTRY_USERNAME: omnidocregistry
+   AZURE_REGISTRY_PASSWORD: [From ACR Access keys]
+   ```
+3. Push to `main` - GitHub Actions will automatically build and deploy
+
+Or use Azure's built-in GitHub integration:
+1. Go to **Deployment Center**
+2. Select **GitHub Actions**
+3. Authorize and select repository
+4. Azure will create workflow automatically
 
 1. Go to **Deployment Center**
 2. Select **GitHub** as source
@@ -140,7 +190,7 @@ Azure will automatically:
 - Deploy on every push to main
 - Handle dependencies
 
-### Step 5: Configure Custom Domain
+### Step 8: Configure Custom Domain
 
 1. Go to **Custom domains**
 2. Click **Add custom domain**
@@ -148,7 +198,7 @@ Azure will automatically:
 4. Follow DNS configuration instructions
 5. Azure will automatically configure SSL
 
-### Step 6: Set Up Celery Worker (Separate App Service)
+### Step 9: Set Up Celery Worker (Container) (Separate App Service)
 
 For background tasks, create a second App Service:
 

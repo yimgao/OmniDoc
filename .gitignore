@@ -88,6 +88,7 @@ Thumbs.db
 !AZURE_DEPLOYMENT.md
 !AZURE_FREE_TIER_SETUP.md
 !DEPLOYMENT_OPTIONS.md
+!AZURE_CONTAINER_DEPLOYMENT.md
 
 # Documentation files in docs/ (allow QUALITY_SCORING.md)
 docs/*.md

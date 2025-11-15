@@ -1,0 +1,88 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Documentation
+*.md
+!README.md
+docs/
+!docs/QUALITY_SCORING.md
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+context.db
+test_*.db
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Cache
+.cache/
+cache/
+*.tmp
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Frontend (not needed in backend container)
+frontend/
+node_modules/
+
+# Test files
+tests/
+.pytest_cache/
+htmlcov/
+
+# Coverage
+.coverage
+coverage.xml
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Project specific
+docs/projects/
+celery_worker.log
+
