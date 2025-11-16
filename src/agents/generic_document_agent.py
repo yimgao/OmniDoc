@@ -285,22 +285,31 @@ class GenericDocumentAgent(BaseAgent):
                 try:
                     agent_type = AgentType(self.definition.id)
                 except ValueError:
-                    # Not a standard AgentType, we'll save by document_type
-                    pass
+                    # Not a standard AgentType - use GENERIC_DOCUMENT as fallback
+                    # This allows us to save any document type to the database
+                    logger.debug(f"Document {self.definition.id} not in AgentType enum, using GENERIC_DOCUMENT fallback")
+                    # Use a generic agent type that exists in the enum
+                    # We'll use document_type to identify the actual document
+                    try:
+                        # Try to use a generic type that makes sense
+                        agent_type = AgentType.TECHNICAL_DOCUMENTATION  # Generic fallback
+                    except:
+                        # Last resort - use any available type
+                        agent_type = list(AgentType)[0]  # Use first available type
                 
-                if agent_type:
-                    output = AgentOutput(
-                        agent_type=agent_type,
-                        document_type=self.definition.id,
-                        content=content,
-                        file_path=virtual_path,  # Virtual path for reference only
-                        status=DocumentStatus.COMPLETE,
-                        generated_at=datetime.now()
-                    )
-                    self.context_manager.save_agent_output(project_id, output)
-                    logger.debug(f"✅ Document {self.definition.id} saved to database")
+                # Always save to database - document_type identifies the actual document
+                output = AgentOutput(
+                    agent_type=agent_type,
+                    document_type=self.definition.id,  # This is the key identifier
+                    content=content,
+                    file_path=virtual_path,  # Virtual path for reference only
+                    status=DocumentStatus.COMPLETE,
+                    generated_at=datetime.now()
+                )
+                self.context_manager.save_agent_output(project_id, output)
+                logger.info(f"✅ Document {self.definition.id} saved to database [agent_type: {agent_type.value}, document_type: {self.definition.id}]")
             except Exception as e:
-                logger.warning(f"Could not save document {self.definition.id} to database: {e}")
+                logger.error(f"❌ Could not save document {self.definition.id} to database: {e}", exc_info=True)
         
         return {
             "id": self.definition.id,

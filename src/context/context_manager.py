@@ -328,11 +328,28 @@ class ContextManager:
                 cursor = conn.cursor()
                 
                 # Get next version number if not provided
+                # Use document_type to get version (more reliable for custom document types)
                 if version is None:
-                    current_version = self.get_document_version(project_id, output.agent_type)
-                    version = current_version + 1
+                    # Try to get version by document_type first (more specific)
+                    try:
+                        cursor.execute("""
+                            SELECT MAX(version) FROM agent_outputs 
+                            WHERE project_id = %s AND document_type = %s
+                        """, (project_id, output.document_type))
+                        result = cursor.fetchone()
+                        current_version = result[0] if result[0] is not None else 0
+                        version = current_version + 1
+                    except Exception as e:
+                        # Fallback to agent_type if document_type query fails
+                        try:
+                            current_version = self.get_document_version(project_id, output.agent_type)
+                            version = current_version + 1
+                        except:
+                            version = 1  # Start with version 1 if all else fails
                 
-                output_id = f"{project_id}_{output.agent_type.value}_v{version}"
+                # Use document_type as part of output_id to ensure uniqueness for custom document types
+                # This allows documents not in AgentType enum to be saved correctly
+                output_id = f"{project_id}_{output.document_type}_v{version}"  # Use document_type for uniqueness
                 
                 # Ensure dependencies is a list (handle None or other types)
                 dependencies = output.dependencies
