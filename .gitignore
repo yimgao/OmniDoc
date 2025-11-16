@@ -61,37 +61,7 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Markdown files in root (except documentation files)
+# Markdown files (except README.md)
 *.md
 !README.md
-!README_BACKEND.md
-!README_PRODUCTION.md
-!BACKEND.md
-!FRONTEND.md
-!SECURITY.md
-!MAINTENANCE.md
-!PRODUCTION_SETUP.md
-!ORACLE_CLOUD_DEPLOYMENT.md
-!DEPLOYMENT_CHECKLIST.md
-!DEPLOYMENT_STRATEGY.md
-!DOCS_INDEX.md
-!UI_IMPROVEMENTS.md
-!IMPROVEMENTS.md
-!DOCUMENT_DEPENDENCIES.md
-!PRODUCTION_DOMAIN.md
-!VERCEL_DEPLOYMENT.md
-!UPSTASH_SETUP.md
-!CODE_IMPROVEMENTS.md
-!RAILWAY_DEPLOYMENT.md
-!RAILWAY_SETUP_STEPS.md
-!RAILWAY_DOMAIN_QUICK_SETUP.md
-!CUSTOM_DOMAIN_SETUP.md
-!DOMAIN_ARCHITECTURE.md
-!HOSTINGER_DNS_SETUP.md
-
-# Documentation files in docs/ (allow QUALITY_SCORING.md)
 docs/*.md
-!docs/QUALITY_SCORING.md
-
-# Allow important root-level documentation
-!NEON_SETUP.md
