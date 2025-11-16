@@ -100,12 +100,15 @@ backend_transport_options = {}
 if "upstash.io" in REDIS_URL or celery_redis_url.startswith("rediss://"):
     # For Upstash or any SSL Redis, configure SSL parameters
     # Both broker and backend need SSL configuration
+    # Note: broker_transport_options uses ssl module constants (for Kombu)
+    #       backend_transport_options uses string values (for Celery Redis backend)
     broker_transport_options = {
         "ssl_cert_reqs": ssl.CERT_REQUIRED,
         "ssl_ca_certs": None,  # Use system CA certificates
     }
+    # Celery Redis backend requires string values for ssl_cert_reqs
     backend_transport_options = {
-        "ssl_cert_reqs": ssl.CERT_REQUIRED,
+        "ssl_cert_reqs": "required",  # String value required by Celery Redis backend
         "ssl_ca_certs": None,  # Use system CA certificates
     }
 
