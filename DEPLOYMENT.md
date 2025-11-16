@@ -6,7 +6,7 @@ Complete guide for deploying OmniDoc in production environments.
 
 1. [Deployment Strategy](#deployment-strategy)
 2. [Architecture Overview](#architecture-overview)
-3. [Oracle Cloud Deployment](#oracle-cloud-deployment)
+3. [Backend Deployment](#backend-deployment)
 4. [Frontend Deployment (Vercel)](#frontend-deployment-vercel)
 5. [Environment Configuration](#environment-configuration)
 6. [Pre-Deployment Checklist](#pre-deployment-checklist)
@@ -46,7 +46,7 @@ See [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) for detailed strategy on wh
          │
 ┌────────▼────────┐
 │   Backend API   │
-│ (Oracle Cloud)  │
+│  (Container)    │
 │ api.omnidoc.info│
 └────┬───────┬────┘
      │       │
@@ -59,148 +59,44 @@ See [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) for detailed strategy on wh
 ### Components
 
 - **Frontend**: Next.js on Vercel (https://omnidoc.info)
-- **Backend**: FastAPI on Oracle Cloud (https://api.omnidoc.info)
+- **Backend**: FastAPI (Docker container, deploy to Railway/Render/Fly.io)
 - **Database**: Neon (managed PostgreSQL)
 - **Cache/Queue**: Upstash (managed Redis)
-- **Task Queue**: Celery workers on Oracle Cloud
+- **Task Queue**: Celery workers (same container or separate)
 
-## 🚀 Deployment Options
+## 🚀 Backend Deployment
 
-### Option 1: Oracle Cloud (Current)
+### Recommended Platforms
 
-See [Oracle Cloud Deployment](#oracle-cloud-deployment) section below.
+The backend is containerized and can be deployed to:
 
-### Option 2: Azure (Alternative)
+- **Railway** - Easy deployment, $5/month free credit
+- **Render** - Free tier available (with limitations)
+- **Fly.io** - Free tier available
+- **Google Cloud Run** - Pay-as-you-go with free tier
 
-See [Azure Deployment Guide](AZURE_DEPLOYMENT.md) for complete Azure setup instructions.
+### Deployment Steps
 
-**Quick Comparison:**
-- **Oracle Cloud**: Free tier available, more manual setup
-- **Azure**: Easier deployment (App Service), less free tier options
+1. **Build Docker Image**:
+   ```bash
+   docker build -t omnidoc-backend:latest .
+   ```
 
-## 🚀 Oracle Cloud Deployment
+2. **Push to Registry** (if using private registry):
+   ```bash
+   docker tag omnidoc-backend:latest your-registry/omnidoc-backend:latest
+   docker push your-registry/omnidoc-backend:latest
+   ```
 
-### Prerequisites
+3. **Deploy to Platform**:
+   - Connect your GitHub repository
+   - Select Dockerfile
+   - Configure environment variables
+   - Deploy!
 
-- Oracle Cloud Free Tier account
-- Ubuntu 22.04 LTS instance (Always Free eligible)
-- Domain name configured (omnidoc.info)
-- SSH access to your instance
+### Environment Variables
 
-### Quick Deployment
-
-Use the automated deployment script:
-
-```bash
-# On your Oracle Cloud instance
-git clone https://github.com/yimgao/OmniDoc.git
-cd OmniDoc
-chmod +x scripts/deploy_oracle_cloud.sh
-./scripts/deploy_oracle_cloud.sh
-```
-
-The script will:
-1. ✅ Install system dependencies (Node.js, Python, Nginx)
-2. ✅ Configure Neon database (managed PostgreSQL)
-3. ✅ Configure Upstash Redis (managed Redis)
-4. ✅ Set up environment variables
-5. ✅ Initialize database tables
-6. ✅ Configure Nginx for API endpoint
-7. ✅ Set up SSL certificates
-8. ✅ Create systemd services
-9. ✅ Start all services
-
-### Manual Deployment Steps
-
-<details>
-<summary>Click to expand detailed manual deployment steps</summary>
-
-#### 1. Initial Server Setup
-
-```bash
-# Connect to your instance
-ssh ubuntu@<your-server-ip>
-
-# Update system
-sudo apt-get update
-sudo apt-get upgrade -y
-
-# Install basic tools
-sudo apt-get install -y git curl wget build-essential
-```
-
-#### 2. Install Node.js and Python
-
-```bash
-# Node.js 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# Python 3.9+
-sudo apt-get install -y python3.9 python3.9-venv python3-pip
-```
-
-#### 3. Configure Environment
-
-```bash
-# Clone repository
-git clone https://github.com/yimgao/OmniDoc.git
-cd OmniDoc
-
-# Copy production environment file
-cp .env.production .env
-
-# Update with your API keys
-nano .env
-# Set GEMINI_API_KEY and JWT_SECRET_KEY
-```
-
-#### 4. Setup Application
-
-```bash
-# Run setup script
-./scripts/setup.sh
-
-# Initialize database
-./scripts/init_database.sh
-```
-
-#### 5. Configure Nginx
-
-The deployment script automatically configures Nginx. For manual setup, see the script's Nginx configuration section.
-
-#### 6. Setup SSL
-
-```bash
-sudo apt-get install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d api.omnidoc.info --non-interactive --agree-tos --email your-email@example.com --redirect
-```
-
-#### 7. Create Systemd Services
-
-The deployment script automatically creates services. For manual setup, see the script's systemd configuration section.
-
-#### 8. Start Services
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable omnidoc-backend omnidoc-celery
-sudo systemctl start omnidoc-backend omnidoc-celery
-```
-
-</details>
-
-### Key Configuration
-
-**Environment Variables** (`.env`):
-- Use `.env.production` as template
-- Update `GEMINI_API_KEY` with your actual API key
-- Database and Redis are pre-configured for production
-
-**Services**:
-- Backend: `sudo systemctl status omnidoc-backend`
-- Celery: `sudo systemctl status omnidoc-celery`
-- Nginx: `sudo systemctl status nginx`
+See [Environment Configuration](#-environment-configuration) section below for required variables.
 
 ## 🌐 Frontend Deployment (Vercel)
 
@@ -294,9 +190,8 @@ NEXT_PUBLIC_API_BASE=https://api.omnidoc.info
 
 ### Infrastructure
 - [ ] Backend services running
-- [ ] Celery workers running
-- [ ] Nginx configured
-- [ ] SSL certificates installed
+- [ ] Celery workers running (if separate)
+- [ ] SSL certificates configured
 - [ ] DNS configured correctly
 
 See [DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md) for complete checklist.
@@ -321,16 +216,11 @@ redis-cli -u "$REDIS_URL" ping
 
 ### Service Status
 
-```bash
-# Check services
-sudo systemctl status omnidoc-backend
-sudo systemctl status omnidoc-celery
-sudo systemctl status nginx
-
-# View logs
-sudo journalctl -u omnidoc-backend -f
-sudo journalctl -u omnidoc-celery -f
-```
+Check service status through your deployment platform's dashboard:
+- Railway: View logs in the dashboard
+- Render: Check service logs
+- Fly.io: Use `fly logs`
+- Cloud Run: Check logs in GCP Console
 
 ### Frontend Verification
 
@@ -344,33 +234,21 @@ sudo journalctl -u omnidoc-celery -f
 ### Common Issues
 
 **Backend not starting:**
-```bash
-# Check logs
-sudo journalctl -u omnidoc-backend -n 50
-
-# Verify environment variables
-cat .env | grep -v "^#"
-
-# Test database connection
-psql "$DATABASE_URL" -c "SELECT 1;"
-```
+- Check logs in your deployment platform's dashboard
+- Verify environment variables are set correctly
+- Test database connection: `psql "$DATABASE_URL" -c "SELECT 1;"`
+- Ensure all required environment variables are configured
 
 **Celery not processing tasks:**
-```bash
-# Check worker status
-sudo systemctl status omnidoc-celery
-
-# Check Redis connection
-redis-cli -u "$REDIS_URL" ping
-
-# View worker logs
-sudo journalctl -u omnidoc-celery -f
-```
+- Check worker logs in deployment platform
+- Verify Redis connection: `redis-cli -u "$REDIS_URL" ping`
+- Ensure `REDIS_URL` is correctly configured
+- Check if Celery worker is running (if separate container)
 
 **CORS errors:**
 - Verify `ALLOWED_ORIGINS` includes your frontend domain
 - Check backend logs for CORS errors
-- Restart backend: `sudo systemctl restart omnidoc-backend`
+- Restart backend service through your deployment platform
 
 **Database connection issues:**
 - Verify `DATABASE_URL` is correct
@@ -395,7 +273,7 @@ sudo journalctl -u omnidoc-celery -f
 - [Neon Database Setup](NEON_SETUP.md) - Configure managed PostgreSQL
 - [Upstash Redis Setup](UPSTASH_SETUP.md) - Configure managed Redis
 - [Vercel Deployment](VERCEL_DEPLOYMENT.md) - Frontend deployment
-- [Azure Deployment](AZURE_DEPLOYMENT.md) - Azure deployment guide (alternative to Oracle Cloud)
+- [Deployment Workflow](DEPLOYMENT_WORKFLOW.md) - How to update backend after deployment
 
 ### Documentation
 - [Backend Guide](BACKEND.md) - API and architecture

@@ -39,7 +39,7 @@ All generated from a simple description of your project idea!
 
 ## 🚀 Quick Start
 
-> **💡 Production Deployment**: Frontend is deployed on [Vercel](https://vercel.com), backend on Oracle Cloud. See [Vercel Deployment Guide](VERCEL_DEPLOYMENT.md) for details.
+> **💡 Production Deployment**: Frontend is deployed on [Vercel](https://vercel.com), backend can be deployed to Railway/Render/Fly.io. See [Deployment Guide](DEPLOYMENT.md) for details.
 
 ### 1. Prerequisites
 
@@ -133,7 +133,7 @@ All documentation is in the project root:
 ### Deployment Documentation
 - **[README_PRODUCTION.md](README_PRODUCTION.md)** - Production deployment guide
 - **[PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)** - Detailed production setup
-- **[ORACLE_CLOUD_DEPLOYMENT.md](ORACLE_CLOUD_DEPLOYMENT.md)** - Oracle Cloud Free Tier deployment
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide
 - **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Pre-deployment checklist
 - **[DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md)** - Deployment strategy and recommendations
 
