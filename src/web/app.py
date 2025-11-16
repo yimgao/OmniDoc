@@ -85,27 +85,29 @@ def validate_environment() -> None:
     missing = []
     for var, description in required_vars.items():
         value = os.getenv(var)
-        if not value:
-            missing.append(f"{var} ({description})")
+        # Check for both None and empty string
+        if not value or value.strip() == "":
+            # Check if variable exists but is empty
+            raw_value = os.environ.get(var)
+            if raw_value is not None:
+                missing.append(f"{var} ({description}) - VARIABLE EXISTS BUT IS EMPTY! Please set a value in Railway Variables.")
+            else:
+                missing.append(f"{var} ({description})")
         else:
             # Log that variable exists (but not the full value for security)
             logger.info(f"✓ {var} is set (length: {len(value)})")
-    
-    if missing:
-        # Also check if variables exist but are empty strings
-        for var in required_vars.keys():
-            raw_value = os.environ.get(var, "")
-            if raw_value == "":
-                logger.warning(f"{var} exists in os.environ but is empty string")
-            elif raw_value:
-                logger.warning(f"{var} exists but os.getenv() returned None - possible encoding issue")
         
         error_msg = (
             "Missing required environment variables:\n"
             + "\n".join(f"  - {var}" for var in missing)
             + "\n\n"
-            + "Please set these in Railway Variables (Settings → Variables) or your .env file.\n"
-            + "Make sure variables are set at the SERVICE level, not just project level."
+            + "TROUBLESHOOTING:\n"
+            + "1. Go to Railway → Your Service → Variables tab\n"
+            + "2. Make sure variables are set at SERVICE level (not just project level)\n"
+            + "3. Check that variable VALUES are not empty\n"
+            + "4. Remove any quotes around values (Railway may add them automatically)\n"
+            + "5. Click 'Update Variables' button to save\n"
+            + "6. Wait for service to redeploy\n"
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
