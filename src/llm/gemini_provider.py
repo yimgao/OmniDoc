@@ -265,8 +265,16 @@ class GeminiProvider(BaseLLMProvider):
                     retry_delay *= 2.0  # Exponential backoff
                 else:
                     logger.error(
-                        f"Gemini API rate limit exceeded after {max_retries} attempts. "
+                        f"❌ RATE LIMIT ERROR: Gemini API rate limit exceeded after {max_retries} attempts. "
                         f"Please wait and try again later."
+                    )
+                    # Also print to stderr for Railway visibility
+                    import sys
+                    print(
+                        f"[RATE LIMIT ERROR] Gemini API rate limit exceeded after {max_retries} attempts. "
+                        f"Please wait and try again later.",
+                        file=sys.stderr,
+                        flush=True
                     )
                     
             except google_exceptions.PermissionDenied as e:
@@ -369,7 +377,14 @@ class GeminiProvider(BaseLLMProvider):
                         retry_delay *= 2.0
                     else:
                         logger.error(
-                            f"Gemini API rate limit error after {max_retries} attempts: {str(e)}"
+                            f"❌ RATE LIMIT ERROR: Gemini API rate limit error after {max_retries} attempts: {str(e)}"
+                        )
+                        # Also print to stderr for Railway visibility
+                        import sys
+                        print(
+                            f"[RATE LIMIT ERROR] Gemini API rate limit error after {max_retries} attempts: {str(e)}",
+                            file=sys.stderr,
+                            flush=True
                         )
                 else:
                     # Non-retryable error - raise immediately

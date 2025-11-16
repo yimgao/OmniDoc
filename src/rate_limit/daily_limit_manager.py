@@ -70,7 +70,20 @@ class DailyLimitManager:
                     f"Daily request limit reached: {today_count}/{self.max_daily_requests} requests today. "
                     f"Please try again tomorrow or upgrade your API plan."
                 )
-                logger.warning(f"🚫 Daily limit reached: {today_count}/{self.max_daily_requests}")
+                logger.error(
+                    f"❌ RATE LIMIT ERROR: Daily request limit reached. "
+                    f"{today_count}/{self.max_daily_requests} requests today. "
+                    f"Please try again tomorrow or upgrade your API plan."
+                )
+                # Also print to stderr for Railway visibility
+                import sys
+                print(
+                    f"[RATE LIMIT ERROR] Daily request limit reached: "
+                    f"{today_count}/{self.max_daily_requests} requests today. "
+                    f"Please try again tomorrow or upgrade your API plan.",
+                    file=sys.stderr,
+                    flush=True
+                )
                 return False, error_msg
             
             # Check if approaching limit (80% threshold)

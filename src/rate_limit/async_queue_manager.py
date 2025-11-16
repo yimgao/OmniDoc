@@ -107,6 +107,20 @@ class AsyncRequestQueue:
         # Check daily limit first
         can_make_request, error_msg = self.daily_limit_manager.can_make_request()
         if not can_make_request:
+            # Log rate limit error clearly for Celery worker visibility
+            logger.error(
+                f"❌ RATE LIMIT ERROR: Daily request limit reached. "
+                f"{error_msg or 'Daily request limit reached'}"
+            )
+            # Also print to stderr for Railway visibility
+            import sys
+            print(
+                f"[RATE LIMIT ERROR] Daily request limit reached. "
+                f"{error_msg or 'Daily request limit reached'}. "
+                f"Please try again tomorrow or upgrade your API plan.",
+                file=sys.stderr,
+                flush=True
+            )
             raise ValueError(error_msg or "Daily request limit reached")
         
         # Apply per-minute rate limiting
@@ -129,7 +143,18 @@ class AsyncRequestQueue:
             # Log error but don't suppress it - let the provider handle retries
             error_str = str(e).lower()
             if "429" in error_str or "resource exhausted" in error_str or "rate limit" in error_str:
-                logger.warning(f"Rate limit error detected in async queue manager: {e}")
+                logger.error(
+                    f"❌ RATE LIMIT ERROR: API rate limit exceeded (429). "
+                    f"Error: {str(e)}"
+                )
+                # Also print to stderr for Railway visibility
+                import sys
+                print(
+                    f"[RATE LIMIT ERROR] API rate limit exceeded (429). "
+                    f"Please wait and try again later. Error: {str(e)}",
+                    file=sys.stderr,
+                    flush=True
+                )
                 # Don't remove from cache on rate limit errors - we might want to retry
             else:
                 logger.error(f"Error executing async function: {e}")
