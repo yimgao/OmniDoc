@@ -91,6 +91,16 @@ celery_app = Celery(
 )
 
 # Celery configuration for production use
+# SSL configuration for Upstash Redis (required for rediss://)
+broker_transport_options = {}
+if "upstash.io" in REDIS_URL or celery_redis_url.startswith("rediss://"):
+    # For Upstash or any SSL Redis, configure SSL parameters
+    import ssl
+    broker_transport_options = {
+        "ssl_cert_reqs": ssl.CERT_REQUIRED,
+        "ssl_ca_certs": None,  # Use system CA certificates
+    }
+
 celery_app.conf.update(
     # Serialization settings (JSON for compatibility)
     task_serializer="json",
@@ -111,5 +121,9 @@ celery_app.conf.update(
     # Worker settings (prevent memory leaks)
     worker_prefetch_multiplier=1,  # Process one task at a time (better for long tasks)
     worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to prevent memory leaks
+    
+    # SSL configuration for Redis broker (Upstash requires SSL)
+    broker_transport_options=broker_transport_options,
+    result_backend_transport_options=broker_transport_options,
 )
 
