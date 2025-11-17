@@ -22,6 +22,9 @@ from src.context.shared_context import (
     AgentType,
     DocumentStatus
 )
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ContextManager:
