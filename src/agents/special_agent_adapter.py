@@ -71,6 +71,7 @@ class SpecialAgentAdapter:
         user_idea: str,
         dependency_documents: Dict[str, Dict[str, str]],
         output_rel_path: str,
+        project_id: Optional[str] = None,
     ) -> Dict[str, str]:
         """Generate and save document, returning metadata dict compatible with GenericDocumentAgent."""
         try:
@@ -82,6 +83,10 @@ class SpecialAgentAdapter:
         # Generate virtual file path for reference (not used for actual file storage)
         virtual_path = f"docs/{output_rel_path}"
 
+        # Update project_id if provided
+        if project_id:
+            self.project_id = project_id
+        
         # Save to database via context_manager
         if self.context_manager and self.project_id:
             try:
@@ -114,7 +119,7 @@ class SpecialAgentAdapter:
         return {
             "id": self.definition.id,
             "name": self.definition.name,
-            "file_path": file_path,
+            "file_path": virtual_path,
             "content": content,
             "generated_at": datetime.now().isoformat(),
         }
