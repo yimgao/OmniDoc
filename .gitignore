@@ -51,6 +51,9 @@ cache/
 *.tmp
 *.bak
 *.log
+!logs/.gitkeep
+logs/*.log
+logs/*.pid
 .pytest_cache/
 htmlcov/
 .coverage
@@ -61,9 +64,12 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Markdown files (except README.md, .github/copilot-instructions.md, and troubleshooting guides)
+# Markdown files (except important documentation)
 *.md
 !README.md
 !/.github/copilot-instructions.md
 !CELERY_WORKER_TROUBLESHOOTING.md
+!CHANGES_SUMMARY.md
+!DEPLOYMENT_CHECKLIST.md
+!COMMIT_MESSAGE.md
 docs/*.md

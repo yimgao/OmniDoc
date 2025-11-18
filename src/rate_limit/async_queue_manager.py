@@ -6,7 +6,7 @@ import asyncio
 import time
 import random
 from collections import deque
-from typing import Callable, Any, Optional, Coroutine
+from typing import Callable, Any, Optional
 from src.utils.logger import get_logger
 from src.rate_limit.daily_limit_manager import get_daily_limit_manager
 
@@ -54,11 +54,22 @@ class AsyncRequestQueue:
         """Wait if we've hit the rate limit (async)"""
         current_time = time.time()
         
-        async with self.lock:
+        try:
+            # Try to acquire lock with timeout to prevent deadlock
+            logger.debug("AsyncRequestQueue: Attempting to acquire lock...")
+            await asyncio.wait_for(self.lock.acquire(), timeout=5.0)
+            logger.debug("AsyncRequestQueue: Lock acquired successfully")
+        except asyncio.TimeoutError:
+            logger.error("❌ AsyncRequestQueue: Failed to acquire lock within 5 seconds - possible deadlock!")
+            raise RuntimeError("Failed to acquire rate limiter lock - possible deadlock")
+        
+        try:
             await self._clean_old_requests()
             
             # Check if we're approaching the rate limit (use 80% threshold for early warning)
             threshold = int(self.max_rate * 0.8)
+            logger.debug(f"AsyncRequestQueue: Current requests: {len(self.request_times)}, threshold: {threshold}, max_rate: {self.max_rate}")
+            
             if len(self.request_times) >= threshold:
                 if len(self.request_times) >= self.max_rate:
                     # Calculate wait time until oldest request expires
@@ -72,10 +83,15 @@ class AsyncRequestQueue:
                     # Approaching limit - add small jitter to spread requests
                     jitter = random.uniform(0, 0.5)
                     if jitter > 0.1:  # Only sleep if jitter is meaningful
+                        logger.debug(f"AsyncRequestQueue: Adding jitter delay: {jitter:.2f} seconds")
                         await asyncio.sleep(jitter)
             
             # Record this request
             self.request_times.append(time.time())
+            logger.debug(f"AsyncRequestQueue: Request recorded. Total requests in window: {len(self.request_times)}")
+        finally:
+            self.lock.release()
+            logger.debug("AsyncRequestQueue: Lock released")
     
     async def execute(self, func: Callable, *args, **kwargs) -> Any:
         """
@@ -101,11 +117,22 @@ class AsyncRequestQueue:
         
         # Check cache first
         if cache_key in self.cache:
-            logger.debug("✅ Using cached result")
+            logger.debug(f"Using cached result for {func.__name__}")
             return self.cache[cache_key]
         
         # Check daily limit first
-        can_make_request, error_msg = self.daily_limit_manager.can_make_request()
+        # Run synchronous can_make_request in executor to avoid blocking
+        import asyncio
+        loop = asyncio.get_event_loop()
+        try:
+            can_make_request, error_msg = await loop.run_in_executor(
+                None,
+                self.daily_limit_manager.can_make_request
+            )
+        except Exception as e:
+            logger.error(f"Error checking daily limit: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
+        
         if not can_make_request:
             # Log rate limit error clearly for Celery worker visibility
             logger.error(
@@ -128,10 +155,15 @@ class AsyncRequestQueue:
         
         # Record the request for daily tracking
         daily_count = self.daily_limit_manager.record_request()
+        logger.debug(f"Daily request count: {daily_count}/{self.daily_limit_manager.max_daily_requests}")
         
         # Execute function
+        start_time = time.time()
         try:
             result = await func(*args, **kwargs)
+            elapsed = time.time() - start_time
+            logger.debug(f"Function {func.__name__} completed in {elapsed:.2f}s")
+            
             # Cache result (limit cache size to prevent memory issues)
             if len(self.cache) > 100:
                 # Remove oldest entry (simple FIFO)
@@ -140,6 +172,8 @@ class AsyncRequestQueue:
             self.cache[cache_key] = result
             return result
         except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"Function {func.__name__} failed after {elapsed:.2f}s: {type(e).__name__}: {str(e)}", exc_info=True)
             # Log error but don't suppress it - let the provider handle retries
             error_str = str(e).lower()
             if "429" in error_str or "resource exhausted" in error_str or "rate limit" in error_str:
@@ -157,7 +191,7 @@ class AsyncRequestQueue:
                 )
                 # Don't remove from cache on rate limit errors - we might want to retry
             else:
-                logger.error(f"Error executing async function: {e}")
+                logger.error(f"🔵 AsyncRequestQueue.execute: EXIT ERROR - func={func.__name__}, error={type(e).__name__}: {str(e)}")
             raise
     
     async def get_stats(self):

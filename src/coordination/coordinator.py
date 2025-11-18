@@ -120,7 +120,12 @@ class WorkflowCoordinator:
                     }
                 )
             
-            logger.info(f"🔍 Reviewing quality of document {document_id}")
+            logger.info(
+                "🔍 Reviewing quality of document %s [Project: %s] [Content length: %d chars]",
+                document_id,
+                project_id,
+                len(original_content)
+            )
             
             # Get automated quality scores first (to include llm_focus and auto_fail)
             from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
@@ -142,11 +147,21 @@ class WorkflowCoordinator:
             )
             
             quality_score = structured_feedback_dict.get("score", 5.0)
-            logger.info(f"📊 Quality score for {document_id}: {quality_score:.1f}/10")
+            logger.info(
+                "📊 Quality score for %s: %.1f/10 [Project: %s]",
+                document_id,
+                quality_score,
+                project_id
+            )
             
             # Step 2: Check if improvement is needed (threshold: 7.0/10)
             if quality_score >= 7.0:
-                logger.info(f"✅ Document {document_id} quality is acceptable (score: {quality_score:.1f}/10)")
+                logger.info(
+                    "✅ Document %s quality is acceptable [Project: %s] [Score: %.1f/10] [Skipping improvement]",
+                    document_id,
+                    project_id,
+                    quality_score
+                )
                 if progress_callback:
                     await progress_callback(
                         {
@@ -161,7 +176,24 @@ class WorkflowCoordinator:
                 return original_content
             
             # Step 3: Document needs improvement
-            logger.info(f"🔧 Document {document_id} needs improvement (score: {quality_score:.1f}/10)")
+            logger.info(
+                "🔧 Document %s needs improvement [Score: %.1f/10] [Project: %s]",
+                document_id,
+                quality_score,
+                project_id
+            )
+            
+            # Get improvement feedback details (for internal use, not logged)
+            issues = structured_feedback_dict.get("issues", [])
+            suggestions = structured_feedback_dict.get("improvement_suggestions", [])
+            
+            if issues:
+                logger.debug(
+                    "🔍 Issues identified for %s [Project: %s]: %s",
+                    document_id,
+                    project_id,
+                    issues[:5]  # Log first 5 issues
+                )
             
             if progress_callback:
                 await progress_callback(
@@ -234,7 +266,15 @@ Issues Identified:
                 structured_feedback=structured_feedback_dict,
             )
             
-            logger.info(f"✅ Document {document_id} improved (original: {len(original_content)} chars, improved: {len(merged_content)} chars)")
+            improvement_ratio = (len(merged_content) / len(original_content)) * 100 if original_content else 0
+            logger.info(
+                "✅ Document %s improved [Project: %s] [Original: %d chars] [Improved: %d chars] [Change: %.1f%%]",
+                document_id,
+                project_id,
+                len(original_content),
+                len(merged_content),
+                improvement_ratio - 100
+            )
             
             if progress_callback:
                 await progress_callback(
@@ -310,7 +350,7 @@ Issues Identified:
         try:
             execution_plan = resolve_dependencies(selected_documents)
         except ValueError as exc:
-            logger.info("Invalid dependency graph resolved: %s", exc)
+            logger.info("Dependency resolution issue: %s", exc)
             raise
         
         total = len(execution_plan)
@@ -318,11 +358,21 @@ Issues Identified:
         generated_docs: Dict[str, Dict[str, str]] = {}
         results: Dict[str, Dict] = {"files": {}, "documents": []}
 
+        workflow_start_time = time.time()
         logger.info(
-            "Starting document generation workflow [Project: %s] [Total documents: %d] [Execution plan: %s]",
+            "🚀 Starting document generation workflow [Project: %s] [Total documents: %d] [Execution plan: %s] [User idea length: %d chars]",
             project_id,
             total,
-            ", ".join(execution_plan)
+            ", ".join(execution_plan),
+            len(user_idea)
+        )
+        
+        # Log user idea preview
+        user_idea_preview = user_idea[:200] + "..." if len(user_idea) > 200 else user_idea
+        logger.info(
+            "💡 User idea preview [Project: %s]: %s",
+            project_id,
+            user_idea_preview
         )
 
         if progress_callback:
@@ -413,21 +463,56 @@ Issues Identified:
             
             doc_start_time = time.time()
             try:
-                document_result = await agent.generate_and_save(
-                    user_idea=user_idea,
-                    dependency_documents=dependency_payload,
-                    output_rel_path=output_rel_path,
-                    project_id=project_id,
-                )
-                doc_duration = time.time() - doc_start_time
-                content_length = len(document_result.get("content", ""))
+                # Log detailed generation start information
                 logger.info(
-                    "✅ Document %s generated successfully [Duration: %.2fs] [Size: %d chars] [Project: %s]",
+                    "📝 Starting generation for document: %s [Project: %s] [Dependencies: %s] [Agent: %s]",
                     document_id,
+                    project_id,
+                    list(dependency_payload.keys()),
+                    type(agent).__name__
+                )
+                
+                logger.info(f"🟣 Coordinator: About to call agent.generate_and_save for {document_id} (agent: {type(agent).__name__})")
+                try:
+                    document_result = await agent.generate_and_save(
+                        user_idea=user_idea,
+                        dependency_documents=dependency_payload,
+                        output_rel_path=output_rel_path,
+                        project_id=project_id,
+                    )
+                    doc_elapsed = time.time() - doc_start_time
+                    logger.info(f"🟣 Coordinator: agent.generate_and_save completed for {document_id} in {doc_elapsed:.2f}s")
+                except Exception as e:
+                    doc_elapsed = time.time() - doc_start_time
+                    logger.error(f"🟣 Coordinator: agent.generate_and_save FAILED for {document_id} after {doc_elapsed:.2f}s: {type(e).__name__}: {str(e)}", exc_info=True)
+                    raise
+                doc_duration = time.time() - doc_start_time
+                content = document_result.get("content", "")
+                content_length = len(content)
+                quality_score = document_result.get("quality_score")
+                file_path = document_result.get("file_path", "")
+                
+                # Log comprehensive generation results
+                logger.info(
+                    "✅ Document %s generated successfully [Project: %s] [Duration: %.2fs] [Size: %d chars] [Quality: %s] [Path: %s]",
+                    document_id,
+                    project_id,
                     doc_duration,
+                    content_length,
+                    f"{quality_score:.1f}/10" if quality_score else "N/A",
+                    file_path
+                )
+                
+                # Log document statistics (simplified)
+                word_count = len(content.split()) if content else 0
+                logger.debug(
+                    "Document %s: %d words, %d chars [Project: %s]",
+                    document_id,
+                    word_count,
                     content_length,
                     project_id
                 )
+                
                 # Also print to stderr for Railway visibility
                 print(f"[DOCUMENT GENERATION] ✅ Completed {document_id} ({index}/{total}) in {doc_duration:.2f}s ({content_length} chars) for project {project_id}", file=sys.stderr, flush=True)
             except Exception as e:
@@ -445,12 +530,6 @@ Issues Identified:
             # Quality review and improvement workflow
             original_content = document_result.get("content", "")
             if original_content:
-                logger.debug(
-                    "Starting quality review for document %s [Project: %s] [Content length: %d chars]",
-                    document_id,
-                    project_id,
-                    len(original_content)
-                )
                 review_start_time = time.time()
                 improved_content = await self._review_and_improve_document(
                     document_id=document_id,
@@ -467,11 +546,11 @@ Issues Identified:
                 review_duration = time.time() - review_start_time
                 if improved_content and improved_content != original_content:
                     logger.info(
-                        "Document %s improved after quality review [Duration: %.2fs] [Original: %d chars] [Improved: %d chars] [Project: %s]",
+                        "✅ Document %s improved [Original: %d chars → Improved: %d chars] [Duration: %.2fs] [Project: %s]",
                         document_id,
-                        review_duration,
                         len(original_content),
                         len(improved_content),
+                        review_duration,
                         project_id
                     )
                 else:
@@ -518,7 +597,12 @@ Issues Identified:
             generated_docs[document_id] = document_result
             completed.append(document_id)
 
-            results["files"][document_id] = document_result["file_path"]
+            # Store document info as dictionary (not just file_path string) for statistics
+            results["files"][document_id] = {
+                "content": document_result.get("content", ""),
+                "path": document_result.get("file_path", ""),
+                "file_path": document_result.get("file_path", ""),
+            }
             results["documents"].append(
                 {
                     "id": document_id,
@@ -541,6 +625,7 @@ Issues Identified:
             self.context_manager.update_project_status(
                 project_id=project_id,
                 status="in_progress",
+                user_idea=user_idea,  # Include user_idea in case status doesn't exist yet
                 completed_agents=completed,
                 results=results,
                 selected_documents=selected_documents,
@@ -565,16 +650,39 @@ Issues Identified:
             "selected_documents": selected_documents,
         }
 
+        workflow_duration = time.time() - workflow_start_time
+        total_chars = sum(len(doc.get("content", "")) for doc in generated_docs.values())
+        total_words = sum(len(doc.get("content", "").split()) for doc in generated_docs.values())
+        
         logger.info(
-            "Document generation workflow completed [Project: %s] [Total: %d documents] [Generated: %d]",
+            "🎉 Document generation workflow completed [Project: %s] [Total: %d documents] [Generated: %d] [Duration: %.2fs] [Total content: %d chars, %d words]",
             project_id,
             total,
-            len(completed)
+            len(completed),
+            workflow_duration,
+            total_chars,
+            total_words
         )
+        
+        # Log summary of all generated documents
+        logger.info(
+            "📋 Generation summary [Project: %s]:",
+            project_id
+        )
+        for doc_id, doc_data in generated_docs.items():
+            content_len = len(doc_data.get("content", ""))
+            quality = doc_data.get("quality_score", "N/A")
+            logger.info(
+                "  - %s: %d chars, quality: %s",
+                doc_id,
+                content_len,
+                f"{quality:.1f}/10" if isinstance(quality, (int, float)) else quality
+            )
 
         self.context_manager.update_project_status(
             project_id=project_id,
             status="complete",
+            user_idea=user_idea,  # Include user_idea for consistency
             completed_agents=completed,
             results=results,
             selected_documents=selected_documents,

@@ -2,6 +2,7 @@
 Celery tasks for document generation
 """
 import asyncio
+import logging
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -16,15 +17,24 @@ from src.web.websocket_manager import websocket_manager
 
 logger = get_logger(__name__)
 
-# In Celery worker, ensure all handlers use stdout/stderr (Railway captures these)
-# Remove any file handlers that might cause "stream is not seekable" errors
+# In Celery worker, ensure all handlers work correctly
+# Replace RotatingFileHandler with FileHandler if needed (to avoid seek errors)
 for handler in list(logger.handlers):
-    # Remove RotatingFileHandler in Celery worker (causes seek errors)
+    # Replace RotatingFileHandler with FileHandler in Celery worker (avoids seek errors)
     if hasattr(handler, 'baseFilename') and hasattr(handler, 'shouldRollover'):
+        # Get the log file path
+        log_file = handler.baseFilename
         logger.removeHandler(handler)
-        logger.debug(f"Removed file handler in Celery worker: {handler}")
+        # Replace with regular FileHandler
+        file_handler = logging.FileHandler(log_file, encoding='utf-8', mode='a')
+        file_handler.setLevel(logging.DEBUG)
+        # Copy formatter from old handler
+        if handler.formatter:
+            file_handler.setFormatter(handler.formatter)
+        logger.addHandler(file_handler)
+        logger.debug(f"Replaced RotatingFileHandler with FileHandler in Celery worker: {log_file}")
     
-    # Ensure console handlers use stdout
+    # Ensure console handlers use stdout/stderr
     if hasattr(handler, 'stream') and handler.stream in (sys.stdout, sys.stderr):
         # Already using stdout/stderr - good
         pass
@@ -126,6 +136,15 @@ def generate_documents_task(
         # Update task state
         self.update_state(state="PROGRESS", meta={"status": "initializing", "project_id": project_id})
         
+        # Create initial project status (required before coordinator starts)
+        context_manager.update_project_status(
+            project_id=project_id,
+            status="in_progress",
+            user_idea=user_idea,
+            provider_name=provider_name,
+            selected_documents=selected_documents,
+        )
+        
         # Create coordinator
         if provider_name:
             logger.debug("Creating WorkflowCoordinator with provider: %s [Project: %s]", provider_name, project_id)
@@ -164,17 +183,39 @@ def generate_documents_task(
         print(f"[CELERY TASK] Workflow completed for project {project_id}", file=sys.stderr, flush=True)
         generation_duration = time.time() - generation_start_time
         
+        # Calculate detailed statistics
+        files = results.get("files", {})
+        total_docs = len(files)
+        total_size = sum(len(str(doc.get("content", ""))) for doc in files.values())
+        
         logger.info(
-            "Document generation workflow completed [Project: %s] [Duration: %.2fs] [Documents: %d]",
+            "📊 Document generation workflow completed [Project: %s] [Duration: %.2fs] [Documents: %d] [Total size: %d chars]",
             project_id,
             generation_duration,
-            len(results.get("files", {}))
+            total_docs,
+            total_size
         )
+        
+        # Log each generated document
+        logger.info(
+            "📄 Generated documents for project %s:",
+            project_id
+        )
+        for doc_id, doc_info in files.items():
+            content_size = len(str(doc_info.get("content", "")))
+            file_path = doc_info.get("path", "N/A")
+            logger.info(
+                "  - %s: %d chars [Path: %s]",
+                doc_id,
+                content_size,
+                file_path
+            )
         
         # Update project status
         context_manager.update_project_status(
             project_id=project_id,
             status="complete",
+            user_idea=user_idea,  # Include user_idea for consistency
             completed_agents=list(results.get("files", {}).keys()),
             results=results,
             selected_documents=selected_documents,
@@ -261,6 +302,7 @@ def generate_documents_task(
             context_manager.update_project_status(
                 project_id=project_id,
                 status="failed",
+                user_idea=user_idea,  # Include user_idea for consistency
                 error=error_message,
                 selected_documents=selected_documents,
             )

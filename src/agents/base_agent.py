@@ -277,29 +277,49 @@ class BaseAgent(ABC):
                     logger.debug(f"{self.agent_name} using phase {phase_to_use} model: {model}")
         
         model_to_use = model or self.model_name
-        logger.info(f"🚀 {self.agent_name} calling LLM (async) (model: {model_to_use}, prompt length: {len(prompt)} chars, temperature: {temperature})")
+        logger.debug(f"{self.agent_name} calling LLM (async) (model: {model_to_use}, prompt length: {len(prompt)} chars)")
         
         # Define async make_request function
         async def make_request(prompt_str: str):
-            return await self.llm_provider.async_generate(
-                prompt=prompt_str,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
+            try:
+                result = await self.llm_provider.async_generate(
+                    prompt=prompt_str,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+                return result
+            except Exception as e:
+                logger.error(f"{self.agent_name} LLM call failed: {type(e).__name__}: {str(e)}", exc_info=True)
+                raise
         
         try:
-            # Use async rate limiter
+            # Use async rate limiter with timeout
             async_rate_limiter = self._get_async_rate_limiter()
-            response = await async_rate_limiter.execute(make_request, prompt)
-            logger.info(f"{self.agent_name} LLM call completed (async) (response length: {len(response)} characters)")
-            # Clean and validate response
+            
+            # Add timeout to prevent hanging (5 minutes max)
+            import asyncio
+            import time
+            start_time = time.time()
+            response = await asyncio.wait_for(
+                async_rate_limiter.execute(make_request, prompt),
+                timeout=300.0  # 5 minutes timeout
+            )
+            elapsed = time.time() - start_time
+            logger.debug(f"{self.agent_name} LLM call completed in {elapsed:.2f}s (response: {len(response) if response else 0} chars)")
+            
             cleaned_response = self._clean_llm_response(response)
             return cleaned_response
+        except asyncio.TimeoutError:
+            logger.error(f"❌ {self.agent_name} _async_call_llm: LLM call timed out after 5 minutes")
+            raise TimeoutError(f"{self.agent_name} LLM call timed out after 5 minutes")
         except (ValueError, KeyError, AttributeError) as e:
             # Don't retry validation errors
-            logger.error(f"{self.agent_name} LLM call failed with validation error (not retried): {str(e)}", exc_info=True)
+            logger.error(f"❌ {self.agent_name} _async_call_llm: LLM call failed with validation error (not retried): {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
+        except Exception as e:
+            logger.error(f"❌ {self.agent_name} _async_call_llm: LLM call failed with unexpected error: {type(e).__name__}: {str(e)}", exc_info=True)
             raise
         # All other exceptions will be caught by the @retry_with_backoff decorator
     

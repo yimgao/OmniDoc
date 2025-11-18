@@ -16,8 +16,8 @@ class TestRequestQueue:
         """Test rate limiter initialization"""
         queue = RequestQueue(max_rate=60, period=60)
         
-        # Safety margin is applied by default (0.95), so max_rate will be 57
-        assert queue.max_rate == int(60 * 0.95)  # 57
+        # Safety margin is applied by default (0.9), so max_rate will be 54
+        assert queue.max_rate == int(60 * 0.9)  # 54
         assert queue.original_max_rate == 60
         assert queue.period == 60
     
@@ -88,7 +88,7 @@ class TestRequestQueue:
         assert "original_max_rate" in stats
         assert "cache_size" in stats
         assert "utilization_percent" in stats
-        # From fixture: max_rate=1000, safety_margin=0.95 (default), so max_rate should be 950
-        assert stats["max_rate"] == int(1000 * 0.95)  # 950
+        # From fixture: max_rate=1000, safety_margin=0.9 (default), so max_rate should be 900
+        assert stats["max_rate"] == int(1000 * 0.9)  # 900
         assert stats["original_max_rate"] == 1000
 

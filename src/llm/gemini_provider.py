@@ -239,38 +239,45 @@ class GeminiProvider(BaseLLMProvider):
         retry_delay = initial_retry_delay
         
         # Log API call start
-        logger.info(f"🤖 Calling Google Gemini API (model: {model_name}, prompt length: {len(prompt)} chars, temperature: {temperature})")
+        import time
+        start_time = time.time()
+        logger.debug(f"Gemini API call starting (model: {model_name}, prompt: {len(prompt)} chars)")
         
         for attempt in range(max_retries):
+            attempt_start = time.time()
             try:
                 response = gen_model.generate_content(
                     prompt,
                     generation_config=generation_config
                 )
-                # Success - reset retry delay for next call
+                attempt_elapsed = time.time() - attempt_start
+                total_elapsed = time.time() - start_time
+                
+                # Only log if retry was needed
                 if attempt > 0:
-                    logger.info(f"✅ Gemini API call succeeded after {attempt} retries")
-                else:
-                    logger.info(f"✅ Gemini API call completed successfully (response length: {len(response.text)} chars)")
+                    logger.warning(f"Gemini API call succeeded after {attempt} retries (total: {total_elapsed:.2f}s)")
+                
+                logger.debug(f"Gemini API call completed in {attempt_elapsed:.2f}s (response: {len(response.text)} chars)")
                 return response.text
                 
             except google_exceptions.ResourceExhausted as e:
                 # 429 Rate limit error - retry with exponential backoff
+                attempt_elapsed = time.time() - attempt_start
                 last_exception = e
+                logger.warning(f"Rate limit (429) on attempt {attempt + 1}/{max_retries} after {attempt_elapsed:.2f}s")
+                
                 if attempt < max_retries - 1:
                     # Exponential backoff with jitter to avoid thundering herd
                     jitter = random.uniform(0, 0.3 * retry_delay)  # Add up to 30% jitter
                     wait_time = retry_delay + jitter
                     
-                    logger.warning(
-                        f"Gemini API rate limit exceeded (429). "
-                        f"Retrying in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})..."
-                    )
+                    logger.warning(f"Retrying in {wait_time:.2f}s (attempt {attempt + 1}/{max_retries})...")
                     time.sleep(wait_time)
                     retry_delay *= 2.0  # Exponential backoff
                 else:
+                    total_elapsed = time.time() - start_time
                     logger.error(
-                        f"❌ RATE LIMIT ERROR: Gemini API rate limit exceeded after {max_retries} attempts. "
+                        f"❌ RATE LIMIT ERROR: Gemini API rate limit exceeded after {max_retries} attempts (total time: {total_elapsed:.2f}s). "
                         f"Please wait and try again later."
                     )
                     # Also print to stderr for Railway visibility

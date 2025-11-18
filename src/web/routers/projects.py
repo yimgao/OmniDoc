@@ -240,10 +240,12 @@ async def get_project_documents(
     if page_size < 1 or page_size > 100:
         raise HTTPException(status_code=400, detail="Page size must be between 1 and 100")
     
-    if context_manager is None:
+    # Get context manager from app state or global variable
+    cm = getattr(request.app.state, "context_manager", None) or context_manager
+    if cm is None:
         raise HTTPException(status_code=500, detail="Context manager not initialized.")
 
-    status_row = context_manager.get_project_status(project_id)
+    status_row = cm.get_project_status(project_id)
     if not status_row:
         raise HTTPException(status_code=404, detail="Project not found.")
 
@@ -257,9 +259,6 @@ async def get_project_documents(
     # Parse completed_agents to check document status
     completed_agents = parse_json_field(status_row.get("completed_agents"), default=[])
     completed_agents_set: Set[str] = set(completed_agents) if isinstance(completed_agents, list) else set()
-
-    # Get content from database instead of files
-    context_manager = request.app.state.context_manager
     
     for doc_id, file_path in files.items():
         definition = get_document_by_id(doc_id)
@@ -280,22 +279,28 @@ async def get_project_documents(
                 pass
             
             if agent_type:
-                agent_output = context_manager.get_agent_output(project_id, agent_type)
+                agent_output = cm.get_agent_output(project_id, agent_type)
                 if agent_output:
                     content = agent_output.content
             else:
                 # Try to find by document_type directly
-                conn = context_manager._get_connection()
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
-                cursor.execute("""
-                    SELECT content FROM agent_outputs 
-                    WHERE project_id = %s AND document_type = %s
-                    ORDER BY version DESC LIMIT 1
-                """, (project_id, doc_id))
-                row = cursor.fetchone()
-                cursor.close()
-                if row:
-                    content = row["content"]
+                from psycopg2.extras import RealDictCursor
+                conn = None
+                try:
+                    conn = cm._get_connection()
+                    cursor = conn.cursor(cursor_factory=RealDictCursor)
+                    cursor.execute("""
+                        SELECT content FROM agent_outputs 
+                        WHERE project_id = %s AND document_type = %s
+                        ORDER BY version DESC LIMIT 1
+                    """, (project_id, doc_id))
+                    row = cursor.fetchone()
+                    cursor.close()
+                    if row:
+                        content = row["content"]
+                finally:
+                    if conn:
+                        cm._put_connection(conn)
         except Exception as exc:
             logger.warning("Failed to read document %s from database: %s", doc_id, exc)
 
@@ -342,11 +347,13 @@ async def get_single_document(request: Request, project_id: str, document_id: st
     if not document_id or len(document_id) > 255:
         raise HTTPException(status_code=400, detail="Invalid document ID format.")
     
-    if context_manager is None:
+    # Get context manager from app state or global variable
+    cm = getattr(request.app.state, "context_manager", None) or context_manager
+    if cm is None:
         raise HTTPException(status_code=500, detail="Context manager not initialized.")
 
     catalog_doc = get_document_by_id(document_id)
-    status_row = context_manager.get_project_status(project_id)
+    status_row = cm.get_project_status(project_id)
     if not status_row:
         raise HTTPException(status_code=404, detail="Project not found.")
 
@@ -364,7 +371,44 @@ async def get_single_document(request: Request, project_id: str, document_id: st
 
     path_value = files[document_id].get("path") if isinstance(files[document_id], dict) else files[document_id]
     content: Optional[str] = None
-    if isinstance(path_value, str) and Path(path_value).exists():
+    
+    # Try to get content from database first (preferred)
+    try:
+        from src.context.shared_context import AgentType
+        agent_type = None
+        try:
+            agent_type = AgentType(document_id)
+        except ValueError:
+            pass
+        
+        if agent_type:
+            agent_output = cm.get_agent_output(project_id, agent_type)
+            if agent_output:
+                content = agent_output.content
+        else:
+            # Try to find by document_type directly
+            from psycopg2.extras import RealDictCursor
+            conn = None
+            try:
+                conn = cm._get_connection()
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                cursor.execute("""
+                    SELECT content FROM agent_outputs 
+                    WHERE project_id = %s AND document_type = %s
+                    ORDER BY version DESC LIMIT 1
+                """, (project_id, document_id))
+                row = cursor.fetchone()
+                cursor.close()
+                if row:
+                    content = row["content"]
+            finally:
+                if conn:
+                    cm._put_connection(conn)
+    except Exception as exc:
+        logger.warning("Failed to read document %s from database: %s", document_id, exc)
+    
+    # Fallback to file system if database content not found
+    if not content and isinstance(path_value, str) and Path(path_value).exists():
         try:
             content = Path(path_value).read_text(encoding="utf-8")
         except OSError as exc:
@@ -410,17 +454,25 @@ async def download_document(request: Request, project_id: str, document_id: str)
     if not document.content:
         raise HTTPException(status_code=404, detail="Document content not found.")
     
-    # Generate filename from document type
-    filename = f"{document.name or document_id}.md"
+    # Generate filename from document type (sanitize for filename)
+    import re
+    safe_name = re.sub(r'[^\w\s-]', '', document.name or document_id)
+    safe_name = re.sub(r'[-\s]+', '-', safe_name)
+    filename = f"{safe_name}.md"
     
     # Return content as file download (from database)
     from fastapi.responses import Response
+    import urllib.parse
+    # URL encode filename for Content-Disposition header
+    encoded_filename = urllib.parse.quote(filename)
+    
     return Response(
-        content=document.content,
+        content=document.content.encode('utf-8'),
         media_type="text/markdown",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Type": "text/markdown; charset=utf-8"
+            "Content-Disposition": f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}',
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Content-Length": str(len(document.content.encode('utf-8')))
         }
     )
 

@@ -435,6 +435,7 @@ class ContextManager:
             version: Optional version number (auto-incremented if None)
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -514,76 +515,93 @@ class ContextManager:
                 # Log error and re-raise
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.error(f"Error saving agent output for {project_id}/{output.agent_type.value}: {e}", exc_info=True)
-                conn.rollback()
+                logger.error(f"Error saving agent output for {project_id}/{output.document_type}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def get_agent_output(self, project_id: str, agent_type: AgentType) -> Optional[AgentOutput]:
         """Get agent output for a project (latest version)"""
         with self._lock:
             conn = self._get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            
-            # Get the latest version of the document
-            cursor.execute("""
-                SELECT * FROM agent_outputs 
-                WHERE project_id = %s AND agent_type = %s
-                ORDER BY version DESC LIMIT 1
-            """, (project_id, agent_type.value))
-            row = cursor.fetchone()
-            cursor.close()
-            
-            if not row:
-                return None
-            
-            generated_at = row["generated_at"]
-            if generated_at and isinstance(generated_at, str):
-                generated_at = datetime.fromisoformat(generated_at)
-            
-            return AgentOutput(
-                agent_type=AgentType(row["agent_type"]),
-                document_type=row["document_type"],
-                content=row["content"],
-                file_path=row["file_path"],
-                quality_score=row["quality_score"],
-                status=DocumentStatus(row["status"]),
-                generated_at=generated_at,
-                dependencies=json.loads(row["dependencies"] or "[]")
-            )
+            try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                
+                # Get the latest version of the document
+                cursor.execute("""
+                    SELECT * FROM agent_outputs 
+                    WHERE project_id = %s AND agent_type = %s
+                    ORDER BY version DESC LIMIT 1
+                """, (project_id, agent_type.value))
+                row = cursor.fetchone()
+                cursor.close()
+                
+                if not row:
+                    return None
+                
+                generated_at = row["generated_at"]
+                if generated_at and isinstance(generated_at, str):
+                    generated_at = datetime.fromisoformat(generated_at)
+                
+                return AgentOutput(
+                    agent_type=AgentType(row["agent_type"]),
+                    document_type=row["document_type"],
+                    content=row["content"],
+                    file_path=row["file_path"],
+                    quality_score=row["quality_score"],
+                    status=DocumentStatus(row["status"]),
+                    generated_at=generated_at,
+                    dependencies=json.loads(row["dependencies"] or "[]")
+                )
+            finally:
+                self._put_connection(conn)
     
     def get_all_agent_outputs(self, project_id: str) -> Dict[AgentType, AgentOutput]:
         """Get all agent outputs for a project"""
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT * FROM agent_outputs 
-            WHERE project_id = %s AND status = %s
-        """, (project_id, DocumentStatus.COMPLETE.value))
-        
-        outputs = {}
-        for row in cursor.fetchall():
-            agent_type = AgentType(row["agent_type"])
-            generated_at = row["generated_at"]
-            if generated_at and isinstance(generated_at, str):
-                generated_at = datetime.fromisoformat(generated_at)
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT * FROM agent_outputs 
+                WHERE project_id = %s AND status = %s
+            """, (project_id, DocumentStatus.COMPLETE.value))
             
-            outputs[agent_type] = AgentOutput(
-                agent_type=agent_type,
-                document_type=row["document_type"],
-                content=row["content"],
-                file_path=row["file_path"],
-                quality_score=row["quality_score"],
-                status=DocumentStatus(row["status"]),
-                generated_at=generated_at,
-                dependencies=json.loads(row["dependencies"] or "[]")
-            )
-        
-        cursor.close()
-        return outputs
+            outputs = {}
+            for row in cursor.fetchall():
+                agent_type = AgentType(row["agent_type"])
+                generated_at = row["generated_at"]
+                if generated_at and isinstance(generated_at, str):
+                    generated_at = datetime.fromisoformat(generated_at)
+                
+                outputs[agent_type] = AgentOutput(
+                    agent_type=agent_type,
+                    document_type=row["document_type"],
+                    content=row["content"],
+                    file_path=row["file_path"],
+                    quality_score=row["quality_score"],
+                    status=DocumentStatus(row["status"]),
+                    generated_at=generated_at,
+                    dependencies=json.loads(row["dependencies"] or "[]")
+                )
+            
+            cursor.close()
+            return outputs
+        finally:
+            self._put_connection(conn)
     
     def save_cross_reference(self, project_id: str, ref: CrossReference):
         """Save cross-reference (thread-safe)"""
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -615,67 +633,81 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error saving cross-reference for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def get_shared_context(self, project_id: str) -> SharedContext:
         """Get complete shared context for a project"""
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        
-        # Get project
-        cursor.execute("SELECT * FROM projects WHERE project_id = %s", (project_id,))
-        project_row = cursor.fetchone()
-        
-        if not project_row:
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            
+            # Get project
+            cursor.execute("SELECT * FROM projects WHERE project_id = %s", (project_id,))
+            project_row = cursor.fetchone()
+            
+            if not project_row:
+                cursor.close()
+                raise ValueError(f"Project {project_id} not found")
+            
+            # Get requirements
+            requirements = self.get_requirements(project_id)
+            
+            # Get all agent outputs
+            agent_outputs = self.get_all_agent_outputs(project_id)
+            
+            # Get workflow status
+            cursor.execute("""
+                SELECT agent_type, status FROM agent_outputs WHERE project_id = %s
+            """, (project_id,))
+            
+            workflow_status = {
+                AgentType(row["agent_type"]): DocumentStatus(row["status"])
+                for row in cursor.fetchall()
+            }
+            
+            # Get cross-references
+            cursor.execute("SELECT * FROM cross_references WHERE project_id = %s", (project_id,))
+            cross_references = [
+                CrossReference(
+                    from_document=row["from_document"],
+                    to_document=row["to_document"],
+                    reference_type=row["reference_type"],
+                    description=row["description"]
+                )
+                for row in cursor.fetchall()
+            ]
+            
+            created_at = project_row["created_at"]
+            updated_at = project_row["updated_at"]
+            if isinstance(created_at, str):
+                created_at = datetime.fromisoformat(created_at)
+            if isinstance(updated_at, str):
+                updated_at = datetime.fromisoformat(updated_at)
+            
             cursor.close()
-            raise ValueError(f"Project {project_id} not found")
-        
-        # Get requirements
-        requirements = self.get_requirements(project_id)
-        
-        # Get all agent outputs
-        agent_outputs = self.get_all_agent_outputs(project_id)
-        
-        # Get workflow status
-        cursor.execute("""
-            SELECT agent_type, status FROM agent_outputs WHERE project_id = %s
-        """, (project_id,))
-        
-        workflow_status = {
-            AgentType(row["agent_type"]): DocumentStatus(row["status"])
-            for row in cursor.fetchall()
-        }
-        
-        # Get cross-references
-        cursor.execute("SELECT * FROM cross_references WHERE project_id = %s", (project_id,))
-        cross_references = [
-            CrossReference(
-                from_document=row["from_document"],
-                to_document=row["to_document"],
-                reference_type=row["reference_type"],
-                description=row["description"]
+            return SharedContext(
+                project_id=project_id,
+                user_idea=project_row["user_idea"],
+                requirements=requirements,
+                agent_outputs=agent_outputs,
+                cross_references=cross_references,
+                workflow_status=workflow_status,
+                created_at=created_at,
+                updated_at=updated_at
             )
-            for row in cursor.fetchall()
-        ]
-        
-        created_at = project_row["created_at"]
-        updated_at = project_row["updated_at"]
-        if isinstance(created_at, str):
-            created_at = datetime.fromisoformat(created_at)
-        if isinstance(updated_at, str):
-            updated_at = datetime.fromisoformat(updated_at)
-        
-        cursor.close()
-        return SharedContext(
-            project_id=project_id,
-            user_idea=project_row["user_idea"],
-            requirements=requirements,
-            agent_outputs=agent_outputs,
-            cross_references=cross_references,
-            workflow_status=workflow_status,
-            created_at=created_at,
-            updated_at=updated_at
-        )
+        finally:
+            self._put_connection(conn)
     
     def update_project_status(
         self,
@@ -703,6 +735,7 @@ class ContextManager:
             error: Error message (if status is "failed")
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -781,7 +814,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error updating project status for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def _safe_get_row_value(self, row, key: str, default):
         """Safely get a value from dict-like row, returning default if key doesn't exist"""
@@ -801,34 +845,37 @@ class ContextManager:
             Status dictionary or None if not found
         """
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT * FROM project_status WHERE project_id = %s", (project_id,))
-        row = cursor.fetchone()
-        cursor.close()
-        
-        if not row:
-            return None
-        
-        return {
-            "project_id": row["project_id"],
-            "status": row["status"],
-            "user_idea": row["user_idea"],
-            "profile": row["profile"],
-            "provider_name": row["provider_name"],
-            "started_at": row["started_at"].isoformat() if isinstance(row["started_at"], datetime) else row["started_at"],
-            "completed_at": row["completed_at"].isoformat() if row["completed_at"] and isinstance(row["completed_at"], datetime) else row["completed_at"],
-            "failed_at": row["failed_at"].isoformat() if row["failed_at"] and isinstance(row["failed_at"], datetime) else row["failed_at"],
-            "error": row["error"],
-            "completed_agents": json.loads(row["completed_agents"] or "[]"),
-            "results": json.loads(row["results"] or "{}") if row["results"] else {},
-            "selected_documents": json.loads(row["selected_documents"] or "[]")
-            if "selected_documents" in row.keys()
-            else [],
-            # Handle optional columns that may not exist in older database schemas
-            "phase1_approved": self._safe_get_row_value(row, "phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
-            "phase1_approved_at": self._safe_get_row_value(row, "phase1_approved_at", None),
-            "phase1_approval_notes": self._safe_get_row_value(row, "phase1_approval_notes", None)
-        }
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("SELECT * FROM project_status WHERE project_id = %s", (project_id,))
+            row = cursor.fetchone()
+            cursor.close()
+            
+            if not row:
+                return None
+            
+            return {
+                "project_id": row["project_id"],
+                "status": row["status"],
+                "user_idea": row["user_idea"],
+                "profile": row["profile"],
+                "provider_name": row["provider_name"],
+                "started_at": row["started_at"].isoformat() if isinstance(row["started_at"], datetime) else row["started_at"],
+                "completed_at": row["completed_at"].isoformat() if row["completed_at"] and isinstance(row["completed_at"], datetime) else row["completed_at"],
+                "failed_at": row["failed_at"].isoformat() if row["failed_at"] and isinstance(row["failed_at"], datetime) else row["failed_at"],
+                "error": row["error"],
+                "completed_agents": json.loads(row["completed_agents"] or "[]"),
+                "results": json.loads(row["results"] or "{}") if row["results"] else {},
+                "selected_documents": json.loads(row["selected_documents"] or "[]")
+                if "selected_documents" in row.keys()
+                else [],
+                # Handle optional columns that may not exist in older database schemas
+                "phase1_approved": self._safe_get_row_value(row, "phase1_approved", 0),  # 0 = pending, 1 = approved, 2 = rejected
+                "phase1_approved_at": self._safe_get_row_value(row, "phase1_approved_at", None),
+                "phase1_approval_notes": self._safe_get_row_value(row, "phase1_approval_notes", None)
+            }
+        finally:
+            self._put_connection(conn)
     
     def approve_phase1(self, project_id: str, notes: Optional[str] = None) -> bool:
         """
@@ -842,6 +889,7 @@ class ContextManager:
             True if approval was successful
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -860,7 +908,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error approving Phase 1 for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def reject_phase1(self, project_id: str, notes: Optional[str] = None) -> bool:
         """
@@ -874,6 +933,7 @@ class ContextManager:
             True if rejection was successful
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -892,7 +952,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error rejecting Phase 1 for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def is_phase1_approved(self, project_id: str) -> Optional[bool]:
         """
@@ -905,21 +976,24 @@ class ContextManager:
             True if approved, False if rejected, None if pending
         """
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT phase1_approved FROM project_status WHERE project_id = %s", (project_id,))
-        row = cursor.fetchone()
-        cursor.close()
-        
-        if not row:
-            return None
-        
-        approved = row["phase1_approved"]
-        if approved == 1:
-            return True
-        elif approved == 2:
-            return False
-        else:
-            return None  # Pending
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("SELECT phase1_approved FROM project_status WHERE project_id = %s", (project_id,))
+            row = cursor.fetchone()
+            cursor.close()
+            
+            if not row:
+                return None
+            
+            approved = row["phase1_approved"]
+            if approved == 1:
+                return True
+            elif approved == 2:
+                return False
+            else:
+                return None  # Pending
+        finally:
+            self._put_connection(conn)
     
     def approve_document(self, project_id: str, agent_type: AgentType, notes: Optional[str] = None) -> bool:
         """
@@ -934,6 +1008,7 @@ class ContextManager:
             True if approval was successful
         """
         with self._lock:
+            conn = None
             try:
                 import logging
                 logger = logging.getLogger(__name__)
@@ -978,7 +1053,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error approving document {agent_type.value} for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def reject_document(self, project_id: str, agent_type: AgentType, notes: Optional[str] = None) -> bool:
         """
@@ -993,6 +1079,7 @@ class ContextManager:
             True if rejection was successful
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -1015,7 +1102,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error rejecting document {agent_type.value} for {project_id}: {e}", exc_info=True)
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def is_document_approved(self, project_id: str, agent_type: AgentType) -> Optional[bool]:
         """
@@ -1030,29 +1128,32 @@ class ContextManager:
         """
         with self._lock:
             conn = self._get_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            # Get the latest version of the document (regardless of approval status)
-            # This ensures we check the most recent version, not an old rejected version
-            cursor.execute("""
-                SELECT version, approved FROM agent_outputs 
-                WHERE project_id = %s AND agent_type = %s
-                ORDER BY version DESC LIMIT 1
-            """, (project_id, agent_type.value))
-            row = cursor.fetchone()
-            cursor.close()
-            
-            if not row:
-                return None  # Document not generated yet
-            
-            # Check the approval status of the latest version
-            approved = row["approved"]
-            
-            if approved == 1:
-                return True  # Approved
-            elif approved == 2:
-                return False  # Rejected
-            else:
-                return None  # Pending (approved=0 or NULL)
+            try:
+                cursor = conn.cursor(cursor_factory=RealDictCursor)
+                # Get the latest version of the document (regardless of approval status)
+                # This ensures we check the most recent version, not an old rejected version
+                cursor.execute("""
+                    SELECT version, approved FROM agent_outputs 
+                    WHERE project_id = %s AND agent_type = %s
+                    ORDER BY version DESC LIMIT 1
+                """, (project_id, agent_type.value))
+                row = cursor.fetchone()
+                cursor.close()
+                
+                if not row:
+                    return None  # Document not generated yet
+                
+                # Check the approval status of the latest version
+                approved = row["approved"]
+                
+                if approved == 1:
+                    return True  # Approved
+                elif approved == 2:
+                    return False  # Rejected
+                else:
+                    return None  # Pending (approved=0 or NULL)
+            finally:
+                self._put_connection(conn)
     
     def get_document_version(self, project_id: str, agent_type: AgentType) -> int:
         """
@@ -1066,19 +1167,22 @@ class ContextManager:
             Version number (default: 1)
         """
         conn = self._get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT version FROM agent_outputs 
-            WHERE project_id = %s AND agent_type = %s
-            ORDER BY version DESC LIMIT 1
-        """, (project_id, agent_type.value))
-        row = cursor.fetchone()
-        cursor.close()
-        
-        if not row:
-            return 1
-        
-        return row["version"] or 1
+        try:
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT version FROM agent_outputs 
+                WHERE project_id = %s AND agent_type = %s
+                ORDER BY version DESC LIMIT 1
+            """, (project_id, agent_type.value))
+            row = cursor.fetchone()
+            cursor.close()
+            
+            if not row:
+                return 1
+            
+            return row["version"] or 1
+        finally:
+            self._put_connection(conn)
     
     def save_document_version(
         self,
@@ -1104,6 +1208,7 @@ class ContextManager:
             Version number that was saved
         """
         with self._lock:
+            conn = None
             try:
                 conn = self._get_connection()
                 cursor = conn.cursor()
@@ -1154,8 +1259,18 @@ class ContextManager:
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.error(f"Error saving document version for {project_id}/{agent_type.value}: {e}", exc_info=True)
-                conn.rollback()
+                if conn:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
                 raise
+            finally:
+                if conn:
+                    try:
+                        self._put_connection(conn)
+                    except Exception as e:
+                        logger.warning(f"Error returning connection to pool: {e}")
     
     def get_documents_for_project(
         self,

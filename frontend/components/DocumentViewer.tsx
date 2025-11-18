@@ -41,7 +41,14 @@ export default function DocumentViewer({
 
   const handleDownload = (docId: string) => {
     const url = getDocumentDownloadUrl(projectId, docId);
-    window.open(url, '_blank');
+    // Create a temporary anchor element to trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = ''; // Let the server set the filename via Content-Disposition
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const copyToClipboard = async (text: string) => {

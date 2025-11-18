@@ -118,12 +118,12 @@ def setup_logger(
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
-    # File handler (if log_dir specified and not in Celery worker)
-    # Skip file handler in Celery worker to avoid "stream is not seekable" error
-    # Celery worker processes stdout/stderr which don't support seek operations
+    # File handler (always enabled for local development)
+    # Use regular FileHandler for Celery worker (RotatingFileHandler causes seek errors)
+    # Use RotatingFileHandler for non-Celery processes
     is_celery_worker = os.getenv("CELERY_WORKER", "").lower() in ("true", "1") or "celery" in sys.argv[0] if len(sys.argv) > 0 else False
     
-    if log_dir_path and not is_celery_worker:
+    if log_dir_path:
         log_path = Path(log_dir_path)
         log_path.mkdir(parents=True, exist_ok=True)
         
@@ -135,19 +135,25 @@ def setup_logger(
         
         file_path = log_path / log_file
         
-        # Use RotatingFileHandler to prevent log files from growing too large
-        try:
-            from logging.handlers import RotatingFileHandler
-            # Max 10MB per file, keep 5 backup files
-            file_handler = RotatingFileHandler(
-                file_path, 
-                maxBytes=10*1024*1024,  # 10MB
-                backupCount=5,
-                encoding='utf-8'
-            )
-        except ImportError:
-            # Fallback to regular FileHandler if RotatingFileHandler unavailable
-            file_handler = logging.FileHandler(file_path, encoding='utf-8')
+        # Use regular FileHandler for Celery worker (avoids seek errors)
+        # Use RotatingFileHandler for other processes (better for long-running apps)
+        if is_celery_worker:
+            # Celery worker: use simple FileHandler
+            file_handler = logging.FileHandler(file_path, encoding='utf-8', mode='a')
+        else:
+            # Non-Celery: use RotatingFileHandler to prevent log files from growing too large
+            try:
+                from logging.handlers import RotatingFileHandler
+                # Max 10MB per file, keep 5 backup files
+                file_handler = RotatingFileHandler(
+                    file_path, 
+                    maxBytes=10*1024*1024,  # 10MB
+                    backupCount=5,
+                    encoding='utf-8'
+                )
+            except ImportError:
+                # Fallback to regular FileHandler if RotatingFileHandler unavailable
+                file_handler = logging.FileHandler(file_path, encoding='utf-8')
         
         file_handler.setLevel(logging.DEBUG)  # File logs are more detailed
         file_handler.setFormatter(detailed_formatter)

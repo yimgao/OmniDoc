@@ -72,12 +72,34 @@ class BaseLLMProvider(ABC):
         Returns:
             Generated text response
         """
-        # Default: Run sync generate() in thread pool
+        # Default: Run sync generate() in thread pool with timeout
+        from src.utils.logger import get_logger
+        import time
+        logger = get_logger(__name__)
+        logger.debug(f"BaseLLMProvider.async_generate: prompt length: {len(prompt)}, model: {model}")
+        
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            lambda: self.generate(prompt, model, temperature, max_tokens, **kwargs)
-        )
+        start_time = time.time()
+        try:
+            # Add timeout to prevent hanging (4 minutes for the sync call)
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: self.generate(prompt, model, temperature, max_tokens, **kwargs)
+                ),
+                timeout=240.0  # 4 minutes timeout
+            )
+            elapsed = time.time() - start_time
+            logger.debug(f"BaseLLMProvider.async_generate completed in {elapsed:.2f}s (result: {len(result) if result else 0} chars)")
+            return result
+        except asyncio.TimeoutError:
+            elapsed = time.time() - start_time
+            logger.error(f"LLM generation timed out after {elapsed:.2f}s (4 minutes)")
+            raise TimeoutError(f"LLM generation timed out after 4 minutes")
+        except Exception as e:
+            elapsed = time.time() - start_time
+            logger.error(f"LLM generation failed after {elapsed:.2f}s: {type(e).__name__}: {str(e)}", exc_info=True)
+            raise
     
     @abstractmethod
     def get_available_models(self) -> list:

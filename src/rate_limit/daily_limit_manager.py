@@ -40,15 +40,27 @@ class DailyLimitManager:
         """Get today's date key (YYYY-MM-DD)"""
         return datetime.now().strftime("%Y-%m-%d")
     
-    def _cleanup_old_entries(self):
-        """Remove entries older than 2 days"""
+    def _cleanup_old_entries(self, lock_held: bool = False):
+        """
+        Remove entries older than 2 days
+        
+        Args:
+            lock_held: If True, assumes lock is already held and won't acquire it again
+        """
         today = datetime.now()
         cutoff = (today - timedelta(days=2)).strftime("%Y-%m-%d")
         
-        with self.lock:
+        if lock_held:
+            # Lock already held, just do the cleanup
             keys_to_remove = [key for key in self.daily_counts.keys() if key < cutoff]
             for key in keys_to_remove:
                 del self.daily_counts[key]
+        else:
+            # Need to acquire lock
+            with self.lock:
+                keys_to_remove = [key for key in self.daily_counts.keys() if key < cutoff]
+                for key in keys_to_remove:
+                    del self.daily_counts[key]
     
     def can_make_request(self) -> tuple[bool, Optional[str]]:
         """
@@ -59,8 +71,12 @@ class DailyLimitManager:
         """
         today_key = self._get_today_key()
         
-        with self.lock:
-            self._cleanup_old_entries()
+        # Use blocking acquire - this will be run in executor, so blocking is OK
+        # The timeout is handled at the async level in AsyncRequestQueue
+        self.lock.acquire()
+        
+        try:
+            self._cleanup_old_entries(lock_held=True)  # Lock already held
             
             today_count = self.daily_counts.get(today_key, 0)
             
@@ -84,6 +100,7 @@ class DailyLimitManager:
                     file=sys.stderr,
                     flush=True
                 )
+                logger.debug("DailyLimitManager.can_make_request: EXIT - limit reached")
                 return False, error_msg
             
             # Check if approaching limit (80% threshold)
@@ -96,6 +113,8 @@ class DailyLimitManager:
                 )
             
             return True, None
+        finally:
+            self.lock.release()
     
     def record_request(self) -> int:
         """
@@ -107,7 +126,7 @@ class DailyLimitManager:
         today_key = self._get_today_key()
         
         with self.lock:
-            self._cleanup_old_entries()
+            self._cleanup_old_entries(lock_held=True)  # Lock already held
             
             if today_key not in self.daily_counts:
                 self.daily_counts[today_key] = 0
@@ -124,7 +143,7 @@ class DailyLimitManager:
         today_key = self._get_today_key()
         
         with self.lock:
-            self._cleanup_old_entries()
+            self._cleanup_old_entries(lock_held=True)  # Lock already held
             
             today_count = self.daily_counts.get(today_key, 0)
             remaining = self.max_daily_requests - today_count
