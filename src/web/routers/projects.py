@@ -384,9 +384,9 @@ async def get_project_status(
 async def get_project_documents(
     request: Request,
     project_id: str,
+    cm: ContextManagerDep,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(50, ge=1, le=100, description="Number of documents per page"),
-    cm: ContextManagerDep
 ) -> ProjectDocumentsResponse:
     """
     Get all documents for a project with pagination support.
