@@ -726,7 +726,7 @@
       "category": "User / Product Analytics",
       "description": "Go-to-market (GTM) strategy",
       "prompt_key": "gtm_strategy_prompt",
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "marketing_plan",
       "dependencies": [
         "feature_roadmap",
@@ -1047,7 +1047,7 @@
       "category": "Project Management / Planning",
       "description": "Risk management and mitigation plan",
       "prompt_key": "risk_management_plan_prompt",
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "risk_management_plan",
       "dependencies": [
         "project_charter",
@@ -1116,7 +1116,7 @@
       "category": "Project Management / Planning",
       "description": "Feature roadmap and iteration plan",
       "prompt_key": "feature_roadmap_prompt",
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "feature_roadmap",
       "dependencies": [
         "requirements",
@@ -1354,7 +1354,7 @@
       "dependencies": [
         "market_research"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "business_overview",
       "prompt_key": "business_overview_prompt",
       "status": "Not Started",
@@ -1374,7 +1374,7 @@
       "dependencies": [
         "business_overview"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "operations_plan",
       "prompt_key": "operations_plan_prompt",
       "status": "Not Started",
@@ -1392,7 +1392,7 @@
       "owner": "Marketing",
       "priority": "High",
       "dependencies": [],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "market_research",
       "prompt_key": "market_research_prompt",
       "status": "Not Started",
@@ -1413,7 +1413,7 @@
         "business_overview",
         "operations_plan"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "financial_model",
       "prompt_key": "financial_model_prompt",
       "status": "Not Started",
@@ -1433,7 +1433,7 @@
       "dependencies": [
         "business_overview"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "licensing_checklist",
       "prompt_key": "licensing_checklist_prompt",
       "status": "Not Started",
@@ -1453,7 +1453,7 @@
       "dependencies": [
         "operations_plan"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "sop",
       "prompt_key": "sop_prompt",
       "status": "Not Started",
@@ -1473,7 +1473,7 @@
       "dependencies": [
         "operations_plan"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "hr_staffing_guide",
       "prompt_key": "hr_staffing_guide_prompt",
       "status": "Not Started",
@@ -1494,7 +1494,7 @@
         "business_overview",
         "market_research"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "marketing_plan",
       "prompt_key": "marketing_plan_prompt",
       "status": "Not Started",
@@ -1516,7 +1516,7 @@
         "operations_plan",
         "financial_model"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "risk_management_plan",
       "prompt_key": "risk_management_plan_prompt",
       "status": "Not Started",
@@ -1537,7 +1537,7 @@
         "sop",
         "operations_plan"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "customer_experience_playbook",
       "prompt_key": "customer_experience_playbook_prompt",
       "status": "Not Started",
@@ -1558,7 +1558,7 @@
         "business_overview",
         "financial_model"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "growth_expansion_plan",
       "prompt_key": "growth_expansion_plan_prompt",
       "status": "Not Started",
@@ -1580,7 +1580,7 @@
         "operations_plan",
         "marketing_plan"
       ],
-      "agent_class": "special",
+      "agent_class": "generic",
       "special_key": "execution_roadmap",
       "prompt_key": "execution_roadmap_prompt",
       "status": "Not Started",
