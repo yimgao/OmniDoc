@@ -7,6 +7,8 @@ import DocumentViewer from '@/components/DocumentViewer';
 import { getProjectDocuments, GeneratedDocument } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import Button from '@/components/ui/Button';
+import EmptyState from '@/components/EmptyState';
+import { ContentAreaSkeleton } from '@/components/ui/Skeleton';
 
 // SWR fetcher function
 const fetcher = async (projectId: string) => {
@@ -66,8 +68,10 @@ export default function ProjectResultsPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50 px-4">
-        <div className="text-sm sm:text-base text-gray-500">{t('results.loading')}</div>
+      <div className="flex h-screen items-center justify-center bg-[#F8F9FA] px-4">
+        <div className="w-full max-w-2xl">
+          <ContentAreaSkeleton />
+        </div>
       </div>
     );
   }
@@ -140,22 +144,15 @@ export default function ProjectResultsPage() {
         {documents.length > 0 ? (
           <DocumentViewer documents={documents} projectId={projectId} />
         ) : (
-          <div className="flex h-full items-center justify-center px-4">
-            <div className="text-center text-gray-500 max-w-md">
-              <div className="text-base sm:text-lg font-medium">{t('results.noDocuments')}</div>
-              <div className="mt-2 text-xs sm:text-sm">
-                {t('results.stillGenerating')}
-              </div>
-              <Button
-                onClick={() => router.push(`/project/${projectId}`)}
-                variant="primary"
-                size="medium"
-                className="mt-4 w-full sm:w-auto"
-              >
-                {t('results.viewStatus')}
-              </Button>
-            </div>
-          </div>
+          <EmptyState
+            icon="📄"
+            title={t('results.noDocuments')}
+            description={t('results.stillGenerating')}
+            primaryAction={{
+              label: t('results.viewStatus'),
+              onClick: () => router.push(`/project/${projectId}`),
+            }}
+          />
         )}
       </div>
     </div>

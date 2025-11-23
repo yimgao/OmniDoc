@@ -4,6 +4,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { DocumentTemplate, getDocumentTemplates } from '../lib/api';
 import { useI18n, getDocumentName, getLevelName } from '../lib/i18n';
 import { rankDocuments, filterDocumentsByView, organizeByLevel, organizeByCategory, getRecommendedDocuments, DocumentLevel, LEVEL_ICONS, type ViewMode } from '../lib/documentRanking';
+import { DocumentListSkeleton } from './ui/Skeleton';
+import EmptyState from './EmptyState';
 
 interface DocumentSelectorProps {
   selectedDocuments: string[];
@@ -183,17 +185,23 @@ export default function DocumentSelector({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-gray-500" suppressHydrationWarning>{t('documents.select')}...</div>
+      <div className="p-4">
+        <DocumentListSkeleton count={5} />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-lg bg-red-50 p-4 text-red-800" suppressHydrationWarning>
-        {t('error.loadDocuments')}: {error}
-      </div>
+      <EmptyState
+        icon="⚠️"
+        title={t('error.loadDocuments')}
+        description={error}
+        primaryAction={{
+          label: t('common.retry') || 'Retry',
+          onClick: () => window.location.reload(),
+        }}
+      />
     );
   }
 
