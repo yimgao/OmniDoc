@@ -86,14 +86,9 @@ def run_document_generation_sync(
             "project_id": project_id,
         })
         
-        # Create initial project status
-        context_manager.update_project_status(
-            project_id=project_id,
-            status="in_progress",
-            user_idea=user_idea,
-            provider_name=provider_name,
-            selected_documents=selected_documents,
-        )
+        # Note: Project status is already initialized by the endpoint with all fields
+        # (profile, provider_name, completed_agents, results, etc.)
+        # We don't need to update it here to avoid overwriting those fields.
         
         # Create coordinator
         if provider_name:
@@ -333,4 +328,3 @@ if CELERY_AVAILABLE and celery_app:
                     exc_info=True
                 )
                 raise
-

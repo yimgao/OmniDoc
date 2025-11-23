@@ -862,14 +862,46 @@ class ContextManager:
                 cursor = conn.cursor()
                 now = datetime.now()
                 
-                # Check if status record exists
-                cursor.execute("SELECT status, started_at FROM project_status WHERE project_id = %s", (project_id,))
+                # Check if status record exists and get existing values to preserve
+                cursor.execute("""
+                    SELECT status, started_at, profile, provider_name 
+                    FROM project_status 
+                    WHERE project_id = %s
+                """, (project_id,))
                 existing = cursor.fetchone()
                 
                 if existing:
+                    # Preserve existing profile and provider_name if not explicitly provided
+                    existing_profile = existing[2] if len(existing) > 2 else None
+                    existing_provider_name = existing[3] if len(existing) > 3 else None
+                    
+                    # Use existing values if new values are not explicitly provided (None means preserve)
+                    # Store the original values to check if they were passed
+                    profile_provided = profile is not None
+                    provider_name_provided = provider_name is not None
+                    
+                    # If not provided, use existing values (even if None)
+                    if not profile_provided:
+                        profile = existing_profile
+                    if not provider_name_provided:
+                        provider_name = existing_provider_name
                     # Update existing status
                     update_fields = ["status = %s"]
                     update_values = [status]
+                    
+                    # Always preserve profile and provider_name if they were set
+                    # Only update if explicitly provided, otherwise preserve existing values
+                    if profile is not None:
+                        update_fields.append("profile = %s")
+                        update_values.append(profile)
+                    
+                    if provider_name is not None:
+                        update_fields.append("provider_name = %s")
+                        update_values.append(provider_name)
+                    
+                    if user_idea is not None:
+                        update_fields.append("user_idea = %s")
+                        update_values.append(user_idea)
                     
                     if completed_agents is not None:
                         update_fields.append("completed_agents = %s")
