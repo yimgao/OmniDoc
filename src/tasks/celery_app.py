@@ -31,6 +31,7 @@ Backward Compatibility:
 """
 import os
 from celery import Celery
+from celery.signals import worker_process_init
 import redis
 import ssl  # 导入 ssl 模块
 from urllib.parse import urlparse  # 导入 urlparse
@@ -200,9 +201,10 @@ celery_app.conf.update(
 )
 
 # Add signal handler to catch Redis limit errors and exit gracefully
-@celery_app.signals.worker_process_init.connect
+# This only runs in Celery worker processes, not in the main app
+@worker_process_init.connect
 def check_redis_on_worker_start(sender=None, **kwargs):
-    """Check Redis availability when worker starts"""
+    """Check Redis availability when worker starts (only in worker processes)"""
     import logging
     logger = logging.getLogger(__name__)
     
@@ -247,7 +249,7 @@ def check_redis_on_worker_start(sender=None, **kwargs):
                         "Main application will continue without background tasks. "
                         "To fix: Upgrade Upstash plan or wait for monthly limit reset."
                     )
-                    # Exit gracefully
+                    # Exit gracefully (only in worker process)
                     import sys
                     sys.exit(0)
     except Exception as e:
