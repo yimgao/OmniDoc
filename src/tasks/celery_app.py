@@ -5,10 +5,11 @@ This module configures the Celery distributed task queue for handling
 long-running document generation tasks asynchronously.
 
 Configuration:
-- Broker: Redis (for task queue)
-- Backend: Redis (for task results)
+- Broker: Redis (primary) or PostgreSQL database (fallback when Redis unavailable)
+- Backend: Redis (primary) or PostgreSQL database (fallback when Redis unavailable)
 - Serialization: JSON (for compatibility)
 - Timezone: UTC
+- Fallback: Automatically uses database broker/backend if Redis is unavailable (requires SQLAlchemy)
 
 Task Limits:
 - Maximum task duration: 1 hour (hard limit)
@@ -119,84 +120,92 @@ def check_redis_available() -> bool:
 # Check Redis availability at module load time
 REDIS_AVAILABLE = check_redis_available()
 
-# If Redis is not available and we're in a Celery worker process, exit gracefully
-# This prevents the worker from crashing when trying to connect
-if not REDIS_AVAILABLE:
-    import sys
-    # Check if we're being imported by Celery worker (not main app)
-    # Celery worker imports this module, and we can detect it by checking the command line
-    if 'celery' in sys.argv[0] or any('celery' in arg for arg in sys.argv):
-        # We're in a Celery worker process and Redis is unavailable
-        # Try to get the specific error message
-        try:
-            test_url = REDIS_URL
-            is_ssl = False
-            if "upstash.io" in REDIS_URL or REDIS_URL.startswith("rediss://"):
-                is_ssl = True
-                if not test_url.startswith("rediss://"):
-                    test_url = test_url.replace("redis://", "rediss://", 1)
-            
-            parsed_url = urlparse(test_url)
-            if is_ssl:
-                r = redis.Redis(
-                    host=parsed_url.hostname,
-                    port=parsed_url.port or 6379,
-                    password=parsed_url.password,
-                    ssl=True,
-                    ssl_cert_reqs=ssl.CERT_NONE,
-                    socket_connect_timeout=5,
-                    socket_timeout=5,
-                    decode_responses=False
-                )
-            else:
-                r = redis.Redis(
-                    host=parsed_url.hostname,
-                    port=parsed_url.port or 6379,
-                    password=parsed_url.password,
-                    socket_connect_timeout=5,
-                    socket_timeout=5,
-                    decode_responses=False
-                )
-            r.ping()
-        except redis.exceptions.ResponseError as e:
-            error_str = str(e).lower()
-            if "max requests limit exceeded" in error_str:
-                print(
-                    "[CELERY WORKER] ⚠️  Redis request limit exceeded (500,000 requests).\n"
-                    "[CELERY WORKER] Worker cannot start until limit resets.\n"
-                    "[CELERY WORKER] Main application will continue to work without background tasks.\n"
-                    "[CELERY WORKER] To fix: Upgrade Upstash plan or wait for monthly limit reset.",
-                    file=sys.stderr,
-                    flush=True
-                )
-                # Exit gracefully with code 0 (not an error, just unavailable)
-                sys.exit(0)
+# Determine broker and backend URLs
+# Fallback to database if Redis is unavailable
+DATABASE_URL = os.getenv("DATABASE_URL")
+USE_DATABASE_FALLBACK = not REDIS_AVAILABLE and DATABASE_URL
 
-# Prepare Redis URL for Celery (may need SSL for Upstash)
-celery_redis_url = REDIS_URL
-is_ssl_celery = False
+if USE_DATABASE_FALLBACK:
+    # Use PostgreSQL database as broker and backend
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Check if SQLAlchemy is available (required for database broker)
+    try:
+        import sqlalchemy
+        SQLALCHEMY_AVAILABLE = True
+    except ImportError:
+        SQLALCHEMY_AVAILABLE = False
+        logger.warning(
+            "SQLAlchemy not available. Cannot use database fallback for Celery. "
+            "Install with: pip install sqlalchemy. "
+            "Worker will exit gracefully."
+        )
+    
+    if SQLALCHEMY_AVAILABLE:
+        logger.info(
+            "Redis unavailable, falling back to PostgreSQL database for Celery broker/backend. "
+            "Note: Database broker is slower than Redis but ensures background tasks continue to work."
+        )
+        
+        # Convert PostgreSQL URL format for Celery
+        # Celery database broker uses: db+postgresql://user:pass@host/db
+        if DATABASE_URL.startswith("postgresql://"):
+            db_conn_part = DATABASE_URL.replace("postgresql://", "", 1)
+            celery_broker_url = f"db+postgresql://{db_conn_part}"
+            celery_backend_url = f"db+postgresql://{db_conn_part}"
+        elif DATABASE_URL.startswith("postgres://"):
+            db_conn_part = DATABASE_URL.replace("postgres://", "", 1)
+            celery_broker_url = f"db+postgresql://{db_conn_part}"
+            celery_backend_url = f"db+postgresql://{db_conn_part}"
+        else:
+            # Assume it's already in the right format or try to use as-is
+            celery_broker_url = f"db+{DATABASE_URL}" if not DATABASE_URL.startswith("db+") else DATABASE_URL
+            celery_backend_url = celery_broker_url
+    else:
+        # SQLAlchemy not available, cannot use database fallback
+        celery_broker_url = None
+        celery_backend_url = None
+else:
+    # Use Redis as normal
+    celery_redis_url = REDIS_URL
+    is_ssl_celery = False
 
-if "upstash.io" in REDIS_URL or REDIS_URL.startswith("rediss://"):
-    is_ssl_celery = True
-    if not celery_redis_url.startswith("rediss://"):
-        # Upstash requires SSL, convert redis:// to rediss://
-        celery_redis_url = celery_redis_url.replace("redis://", "rediss://", 1)
+    if "upstash.io" in REDIS_URL or REDIS_URL.startswith("rediss://"):
+        is_ssl_celery = True
+        if not celery_redis_url.startswith("rediss://"):
+            # Upstash requires SSL, convert redis:// to rediss://
+            celery_redis_url = celery_redis_url.replace("redis://", "rediss://", 1)
 
-# *** 修复 ***
-# 如果使用 SSL (rediss://)，Celery 后端会引发 ValueError，除非
-# 提供了 ssl_cert_reqs。我们将其添加到 URL 查询字符串中。
-# redis-py URL 解析器需要字符串 'none'，而不是 'CERT_NONE'。
-if is_ssl_celery and "ssl_cert_reqs" not in celery_redis_url:
-    separator = "?" if "?" not in celery_redis_url else "&"
-    celery_redis_url += f"{separator}ssl_cert_reqs=none"
+    # *** 修复 ***
+    # 如果使用 SSL (rediss://)，Celery 后端会引发 ValueError，除非
+    # 提供了 ssl_cert_reqs。我们将其添加到 URL 查询字符串中。
+    # redis-py URL 解析器需要字符串 'none'，而不是 'CERT_NONE'。
+    if is_ssl_celery and "ssl_cert_reqs" not in celery_redis_url:
+        separator = "?" if "?" not in celery_redis_url else "&"
+        celery_redis_url += f"{separator}ssl_cert_reqs=none"
+    
+    celery_broker_url = celery_redis_url
+    celery_backend_url = celery_redis_url
 
 # Create Celery app with application name
 # Use a custom connection pool that handles limit errors gracefully
 try:
+    if celery_broker_url is None:
+        # Cannot create Celery app - no broker available
+        import logging
+        import sys
+        logger = logging.getLogger(__name__)
+        logger.error(
+            "Cannot create Celery app: Redis unavailable and database fallback not possible. "
+            "Worker will exit gracefully. Main application will continue without background tasks."
+        )
+        sys.exit(0)
+    
     celery_app = Celery(
         "omnidoc",
-        broker=celery_redis_url,  # Message broker for task queue
-        backend=celery_redis_url,  # Result backend for task results
+        broker=celery_broker_url,  # Message broker (Redis or Database)
+        backend=celery_backend_url,  # Result backend (Redis or Database)
         include=["src.tasks.generation_tasks"],  # Task modules to include
     )
 except Exception as e:
@@ -213,8 +222,11 @@ except Exception as e:
 
 # Celery configuration for production use
 # SSL configuration for Upstash Redis (required for rediss://)
+# Note: Database broker doesn't need SSL transport options
 broker_transport_options = {}
-if "upstash.io" in REDIS_URL or celery_redis_url.startswith("rediss://"):
+# Only apply SSL options if using Redis (not database fallback)
+# Check if broker URL starts with db+ (database) - if so, skip SSL options
+if celery_broker_url and not celery_broker_url.startswith("db+") and ("upstash.io" in REDIS_URL or REDIS_URL.startswith("rediss://")):
     # *** 修复 ***
     # 使用 CERT_NONE 来匹配 URL 参数。
     broker_transport_options = {
