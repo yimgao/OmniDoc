@@ -89,6 +89,24 @@ def check_redis_available() -> bool:
         
         r.ping()
         return True
+    except redis.exceptions.ResponseError as e:
+        # Check for specific Redis limit errors
+        error_str = str(e).lower()
+        if "max requests limit exceeded" in error_str:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(
+                "Redis request limit exceeded. Celery worker cannot start. "
+                "Please upgrade your Upstash plan or wait for the limit to reset. "
+                "The main application will continue to work without background tasks."
+            )
+            # Return False so worker can handle gracefully
+            return False
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Redis connection failed: {type(e).__name__}: {str(e)}")
+            return False
     except Exception as e:
         # Log the error for debugging
         import logging
@@ -119,12 +137,25 @@ if is_ssl_celery and "ssl_cert_reqs" not in celery_redis_url:
     celery_redis_url += f"{separator}ssl_cert_reqs=none"
 
 # Create Celery app with application name
-celery_app = Celery(
-    "omnidoc",
-    broker=celery_redis_url,  # Message broker for task queue
-    backend=celery_redis_url,  # Result backend for task results
-    include=["src.tasks.generation_tasks"],  # Task modules to include
-)
+# Use a custom connection pool that handles limit errors gracefully
+try:
+    celery_app = Celery(
+        "omnidoc",
+        broker=celery_redis_url,  # Message broker for task queue
+        backend=celery_redis_url,  # Result backend for task results
+        include=["src.tasks.generation_tasks"],  # Task modules to include
+    )
+except Exception as e:
+    # If Celery app creation fails due to Redis issues, log and re-raise
+    import logging
+    logger = logging.getLogger(__name__)
+    error_str = str(e).lower()
+    if "max requests limit exceeded" in error_str:
+        logger.error(
+            "Cannot create Celery app: Redis request limit exceeded. "
+            "Worker will exit gracefully. Main application will continue without background tasks."
+        )
+    raise
 
 # Celery configuration for production use
 # SSL configuration for Upstash Redis (required for rediss://)
@@ -157,7 +188,68 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # Process one task at a time (better for long tasks)
     worker_max_tasks_per_child=10,  # Restart worker after 10 tasks to prevent memory leaks
     
+    # Broker connection retry settings (handle Redis limit errors gracefully)
+    broker_connection_retry_on_startup=True,  # Retry connection on startup
+    broker_connection_retry=True,  # Enable connection retries
+    broker_connection_max_retries=3,  # Reduced retries to fail faster when limit exceeded
+    broker_connection_retry_delay=10.0,  # Longer delay between retries (10 seconds)
+    
     # SSL configuration for Redis broker (Upstash requires SSL)
     broker_transport_options=broker_transport_options,
     result_backend_transport_options=broker_transport_options,
 )
+
+# Add signal handler to catch Redis limit errors and exit gracefully
+@celery_app.signals.worker_process_init.connect
+def check_redis_on_worker_start(sender=None, **kwargs):
+    """Check Redis availability when worker starts"""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        if not check_redis_available():
+            # Try to get specific error
+            try:
+                test_url = REDIS_URL
+                is_ssl = False
+                if "upstash.io" in REDIS_URL or REDIS_URL.startswith("rediss://"):
+                    is_ssl = True
+                    if not test_url.startswith("rediss://"):
+                        test_url = test_url.replace("redis://", "rediss://", 1)
+                
+                parsed_url = urlparse(test_url)
+                if is_ssl:
+                    r = redis.Redis(
+                        host=parsed_url.hostname,
+                        port=parsed_url.port or 6379,
+                        password=parsed_url.password,
+                        ssl=True,
+                        ssl_cert_reqs=ssl.CERT_NONE,
+                        socket_connect_timeout=5,
+                        socket_timeout=5,
+                        decode_responses=False
+                    )
+                else:
+                    r = redis.Redis(
+                        host=parsed_url.hostname,
+                        port=parsed_url.port or 6379,
+                        password=parsed_url.password,
+                        socket_connect_timeout=5,
+                        socket_timeout=5,
+                        decode_responses=False
+                    )
+                r.ping()
+            except redis.exceptions.ResponseError as e:
+                error_str = str(e).lower()
+                if "max requests limit exceeded" in error_str:
+                    logger.error(
+                        "Redis request limit exceeded. Worker cannot start. "
+                        "Main application will continue without background tasks. "
+                        "To fix: Upgrade Upstash plan or wait for monthly limit reset."
+                    )
+                    # Exit gracefully
+                    import sys
+                    sys.exit(0)
+    except Exception as e:
+        logger.warning(f"Error checking Redis on worker start: {e}")
+        # Don't exit - let Celery handle it
