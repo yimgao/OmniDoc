@@ -91,22 +91,16 @@ export function PlaceholdersAndVanishInput({
         className
       )}
       onSubmit={handleSubmit}
-      aria-label="Project idea input form"
     >
       <div className="relative w-full">
-        <label htmlFor="userIdeaTextarea" className="sr-only">
-          Enter your project idea
-        </label>
         <textarea
-          id="userIdeaTextarea"
           value={value}
           onChange={onChange}
           disabled={disabled}
           placeholder=""
           maxLength={maxLength}
-          aria-label="Project idea input"
+          aria-label="Enter your project idea"
           aria-describedby="charCount"
-          aria-required="true"
           className={cn(
             'w-full rounded-2xl border border-gray-300 bg-white px-4 py-3 pr-14 text-gray-900',
             'focus:border-[#007BFF] focus:outline-none focus:ring-2 focus:ring-[#007BFF]',
