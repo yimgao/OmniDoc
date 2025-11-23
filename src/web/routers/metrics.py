@@ -14,6 +14,7 @@ from src.utils.redis_client import get_redis_pool
 from src.coordination.metrics import _metrics_store, get_metrics
 from src.utils.logger import get_logger
 from src.web.monitoring import get_all_metrics, get_timing_stats
+from src.web.dependencies import ContextManagerDep
 
 logger = get_logger(__name__)
 
@@ -26,6 +27,13 @@ class RedisUsageResponse(BaseModel):
     usage_stats: Optional[Dict[str, Any]] = None
     rate_limit_reached: bool = False
     message: Optional[str] = None
+
+
+class ConnectionPoolHealthResponse(BaseModel):
+    """Connection pool health information"""
+    redis: Dict[str, Any]
+    postgresql: Dict[str, Any]
+    overall_health: str  # "healthy", "warning", "critical"
 
 
 class SystemMetricsResponse(BaseModel):
@@ -95,6 +103,69 @@ async def get_parallel_execution_metrics(project_id: str) -> Dict[str, Any]:
     
     metrics = _metrics_store[project_id]
     return metrics.get_summary()
+
+
+@router.get("/connection-pools", response_model=ConnectionPoolHealthResponse)
+async def get_connection_pool_health(cm: ContextManagerDep) -> ConnectionPoolHealthResponse:
+    """
+    Get connection pool health metrics for Redis and PostgreSQL.
+    
+    Provides detailed information about connection pool utilization,
+    health status, and potential issues. Useful for monitoring and debugging
+    connection-related problems.
+    
+    Returns:
+        ConnectionPoolHealthResponse with health metrics for both pools
+    """
+    # Get Redis pool health
+    redis_pool = get_redis_pool()
+    redis_health = {}
+    
+    if redis_pool:
+        try:
+            redis_health = redis_pool.get_pool_health()
+        except Exception as e:
+            logger.error(f"Error getting Redis pool health: {e}")
+            redis_health = {
+                "health_status": "error",
+                "error": str(e)
+            }
+    else:
+        redis_health = {
+            "health_status": "not_configured",
+            "pool_initialized": False
+        }
+    
+    # Get PostgreSQL pool health
+    postgresql_health = {}
+    try:
+        postgresql_health = cm.get_connection_stats()
+    except Exception as e:
+        logger.error(f"Error getting PostgreSQL pool health: {e}")
+        postgresql_health = {
+            "health_status": "error",
+            "error": str(e)
+        }
+    
+    # Determine overall health
+    redis_status = redis_health.get("health_status", "unknown")
+    postgresql_status = postgresql_health.get("health_status", "unknown")
+    
+    # Overall health is worst of the two
+    if redis_status == "critical" or postgresql_status == "critical":
+        overall_health = "critical"
+    elif redis_status == "warning" or postgresql_status == "warning":
+        overall_health = "warning"
+    elif redis_status in ("error", "not_configured") or postgresql_status == "error":
+        overall_health = "warning"
+    else:
+        overall_health = "healthy"
+    
+    return ConnectionPoolHealthResponse(
+        redis=redis_health,
+        postgresql=postgresql_health,
+        overall_health=overall_health
+    )
 
 
 @router.get("/system", response_model=SystemMetricsResponse)

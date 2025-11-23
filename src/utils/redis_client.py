@@ -343,6 +343,88 @@ class RedisClientPool:
         """Get Redis usage statistics"""
         return self._rate_limiter.get_usage_stats()
     
+    def get_pool_health(self) -> Dict[str, Any]:
+        """
+        Get Redis connection pool health metrics.
+        
+        Returns:
+            Dictionary with pool health information including:
+            - pool_size: Maximum connections in pool
+            - created_connections: Number of connections created (if available)
+            - health_status: "healthy", "warning", "critical", or "unknown"
+            - pool_initialized: Whether pool is initialized
+            - usage_stats: Rate limiting usage statistics
+            - rate_limit_ok: Whether rate limit check passes
+        """
+        health = {
+            "pool_size": self.max_connections,
+            "pool_initialized": self._sync_pool is not None,
+            "health_status": "unknown",
+        }
+        
+        try:
+            if self._sync_pool:
+                # Try to get connection pool statistics
+                # redis-py ConnectionPool has limited introspection, but we can try
+                try:
+                    # Get created connections if available (private attribute)
+                    created = getattr(self._sync_pool, '_created_connections', None)
+                    if created is not None:
+                        health["created_connections"] = created
+                        health["pool_utilization_percent"] = (
+                            (created / self.max_connections) * 100 if self.max_connections > 0 else 0
+                        )
+                        
+                        # Determine health status based on utilization
+                        utilization = health["pool_utilization_percent"]
+                        if utilization < 70:
+                            health["health_status"] = "healthy"
+                        elif utilization < 90:
+                            health["health_status"] = "warning"
+                        else:
+                            health["health_status"] = "critical"
+                    else:
+                        # Can't get detailed stats, assume healthy but note as limited
+                        health["health_status"] = "healthy"
+                        health["note"] = "Detailed pool stats not available"
+                    
+                    # Test connection health by trying to ping
+                    try:
+                        client = self.get_sync_client()
+                        client.ping()
+                        health["connection_test"] = "ok"
+                    except Exception as ping_err:
+                        health["connection_test"] = "failed"
+                        health["connection_error"] = str(ping_err)
+                        health["health_status"] = "warning"
+                        
+                except Exception as e:
+                    logger.debug(f"Could not get detailed pool stats: {e}")
+                    health["health_status"] = "unknown"
+                    health["error"] = str(e)
+            else:
+                health["health_status"] = "not_initialized"
+            
+            # Add usage stats and rate limiting info for context
+            try:
+                health["usage_stats"] = self.get_usage_stats()
+                can_make, error_msg = self.check_rate_limit()
+                health["rate_limit_ok"] = can_make
+                health["rate_limit_message"] = error_msg
+                
+                # If rate limit is reached, mark health as warning
+                if not can_make and health["health_status"] == "healthy":
+                    health["health_status"] = "warning"
+            except Exception as e:
+                logger.debug(f"Could not get usage stats: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error getting pool health: {e}")
+            health["health_status"] = "error"
+            health["error"] = str(e)
+        
+        return health
+    
     def close(self):
         """Close all connections"""
         if self._sync_pool:

@@ -231,14 +231,14 @@ class ContextManager:
             except Exception:
                 pass
     
-    def get_connection_stats(self) -> Dict[str, int]:
+    def get_connection_stats(self) -> Dict[str, Any]:
         """
         Get connection pool statistics for monitoring.
         
         Returns:
-            Dictionary with connection statistics
+            Dictionary with connection statistics including health status
         """
-        return {
+        stats = {
             **self._connection_stats,
             "max_connections": self._max_conn,
             "min_connections": self._min_conn,
@@ -247,6 +247,23 @@ class ContextManager:
                 if self._max_conn > 0 else 0
             ),
         }
+        
+        # Add health status
+        utilization = stats["pool_utilization_percent"]
+        if utilization < 70:
+            stats["health_status"] = "healthy"
+        elif utilization < 90:
+            stats["health_status"] = "warning"
+        else:
+            stats["health_status"] = "critical"
+        
+        # Add pool status
+        stats["pool_initialized"] = self._connection_pool is not None
+        stats["failed_rate"] = (
+            (stats["failed_connections"] / max(stats["total_created"], 1)) * 100
+        ) if stats["total_created"] > 0 else 0
+        
+        return stats
     
     @contextmanager
     def _get_cursor(self):
