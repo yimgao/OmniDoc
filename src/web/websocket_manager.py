@@ -29,18 +29,24 @@ class WebSocketManager:
     - Heartbeat/ping support
     """
     
-    def __init__(self, max_connections_per_project: int = 5, max_queue_size: int = 100) -> None:
+    def __init__(self, max_connections_per_project: int = 5, max_queue_size: int = 100, 
+                 heartbeat_interval: int = 30, heartbeat_timeout: int = 60) -> None:
         """
         Initialize the WebSocket manager with empty connection registry.
         
         Args:
             max_connections_per_project: Maximum number of connections per project
             max_queue_size: Maximum number of messages to queue per project
+            heartbeat_interval: Interval in seconds between heartbeat messages (default: 30)
+            heartbeat_timeout: Timeout in seconds before considering connection dead (default: 60)
         """
         self.active_connections: Dict[str, Set[WebSocket]] = {}
         self.message_queue: Dict[str, List[Dict[str, Any]]] = {}  # Cache messages for disconnected clients
+        self.connection_last_pong: Dict[WebSocket, float] = {}  # Track last pong time for each connection
         self.max_connections_per_project = max_connections_per_project
         self.max_queue_size = max_queue_size
+        self.heartbeat_interval = heartbeat_interval
+        self.heartbeat_timeout = heartbeat_timeout
     
     async def connect(self, websocket: WebSocket, project_id: str) -> None:
         """
@@ -70,6 +76,10 @@ class WebSocketManager:
         
         await websocket.accept()
         self.active_connections.setdefault(project_id, set()).add(websocket)
+        
+        # Initialize heartbeat tracking for this connection
+        import time
+        self.connection_last_pong[websocket] = time.time()
         
         # Send queued messages if any
         if project_id in self.message_queue and self.message_queue[project_id]:
@@ -108,6 +118,9 @@ class WebSocketManager:
         connections.discard(websocket)
         if not connections:
             self.active_connections.pop(project_id, None)
+        
+        # Clean up heartbeat tracking
+        self.connection_last_pong.pop(websocket, None)
 
     async def send_progress(self, project_id: str, message: Dict[str, Any]) -> None:
         """
@@ -201,6 +214,98 @@ class WebSocketManager:
             Number of active connections
         """
         return len(self.active_connections.get(project_id, set()))
+    
+    async def send_ping(self, websocket: WebSocket) -> bool:
+        """
+        Send a ping message to check if connection is alive.
+        
+        Args:
+            websocket: WebSocket connection to ping
+            
+        Returns:
+            True if ping was sent successfully, False otherwise
+        """
+        try:
+            await websocket.send_json({
+                "type": "ping",
+                "timestamp": datetime.now().isoformat()
+            })
+            return True
+        except Exception as exc:
+            logger.debug("Failed to send ping: %s", exc)
+            return False
+    
+    def record_pong(self, websocket: WebSocket) -> None:
+        """
+        Record a pong response from a connection.
+        
+        Args:
+            websocket: WebSocket connection that sent pong
+        """
+        import time
+        self.connection_last_pong[websocket] = time.time()
+    
+    async def check_connection_health(self, websocket: WebSocket, project_id: str) -> bool:
+        """
+        Check if a connection is healthy by verifying last pong time.
+        
+        Args:
+            websocket: WebSocket connection to check
+            project_id: Project identifier
+            
+        Returns:
+            True if connection is healthy, False if it should be disconnected
+        """
+        import time
+        current_time = time.time()
+        last_pong = self.connection_last_pong.get(websocket, current_time)
+        
+        # If no pong received within timeout, connection is dead
+        if current_time - last_pong > self.heartbeat_timeout:
+            logger.warning(
+                "Connection health check failed for project %s: no pong received in %d seconds",
+                project_id,
+                int(current_time - last_pong)
+            )
+            return False
+        
+        return True
+    
+    async def cleanup_dead_connections(self, project_id: str) -> int:
+        """
+        Clean up dead connections for a project.
+        
+        Args:
+            project_id: Project identifier
+            
+        Returns:
+            Number of connections cleaned up
+        """
+        connections = self.active_connections.get(project_id, set())
+        if not connections:
+            return 0
+        
+        dead_connections = []
+        for websocket in list(connections):
+            if not await self.check_connection_health(websocket, project_id):
+                dead_connections.append(websocket)
+        
+        # Disconnect dead connections
+        for websocket in dead_connections:
+            try:
+                await websocket.close(code=1001, reason="Connection health check failed")
+            except Exception:
+                pass
+            self.disconnect(websocket, project_id)
+        
+        if dead_connections:
+            logger.info(
+                "Cleaned up %d dead connections for project %s",
+                len(dead_connections),
+                project_id
+            )
+        
+        return len(dead_connections)
 
 
 # Global WebSocket manager instance

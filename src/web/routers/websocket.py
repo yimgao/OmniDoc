@@ -53,7 +53,7 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str) -> None:
         logger.warning("WebSocket connection rejected: too many connections for project %s", project_id)
         return
     
-    await websocket_manager.connect(websocket, project_id)
+        await websocket_manager.connect(websocket, project_id)
     request_id = str(uuid.uuid4())
     logger.info("WebSocket connected: project_id=%s [Request-ID: %s]", project_id, request_id)
     
@@ -66,16 +66,53 @@ async def websocket_endpoint(websocket: WebSocket, project_id: str) -> None:
                 "timestamp": datetime.now().isoformat(),
             }
         )
+        
+        # Start heartbeat task
+        heartbeat_interval = websocket_manager.heartbeat_interval
+        last_heartbeat = datetime.now()
+        
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
-            except asyncio.TimeoutError:
-                # Send heartbeat to keep connection alive
+                # Wait for message with timeout (heartbeat interval)
+                message = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=float(heartbeat_interval)
+                )
+                
+                # Parse message
+                import json
                 try:
-                    await websocket.send_json(
-                        {"type": "heartbeat", "timestamp": datetime.now().isoformat()}
-                    )
-                except Exception:
+                    data = json.loads(message)
+                    # Handle pong response
+                    if data.get("type") == "pong":
+                        websocket_manager.record_pong(websocket)
+                        logger.debug("Received pong from project %s", project_id)
+                    # Handle ping from client (echo back as pong)
+                    elif data.get("type") == "ping":
+                        await websocket.send_json({
+                            "type": "pong",
+                            "timestamp": datetime.now().isoformat()
+                        })
+                        websocket_manager.record_pong(websocket)
+                except (json.JSONDecodeError, KeyError):
+                    # Ignore invalid messages
+                    pass
+                
+            except asyncio.TimeoutError:
+                # Send heartbeat/ping to keep connection alive
+                try:
+                    # Check connection health first
+                    if not await websocket_manager.check_connection_health(websocket, project_id):
+                        logger.warning("Connection health check failed, closing connection for project %s", project_id)
+                        break
+                    
+                    # Send ping
+                    ping_sent = await websocket_manager.send_ping(websocket)
+                    if ping_sent:
+                        last_heartbeat = datetime.now()
+                        logger.debug("Sent ping to project %s", project_id)
+                except Exception as exc:
+                    logger.debug("Failed to send heartbeat/ping: %s", exc)
                     # Connection may have closed, break loop
                     break
             except WebSocketDisconnect:
