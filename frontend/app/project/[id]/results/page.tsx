@@ -72,11 +72,14 @@ export default function ProjectResultsPage() {
   }
 
   if (error) {
+    // Convert error to string - SWR error can be an Error object
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50 px-4">
         <div className="rounded-lg bg-red-50 p-4 sm:p-6 text-red-800 max-w-md w-full">
           <div className="text-sm sm:text-base font-medium">{t('results.errorLoading')}</div>
-          <div className="mt-2 text-xs sm:text-sm break-words">{error}</div>
+          <div className="mt-2 text-xs sm:text-sm break-words">{errorMessage}</div>
           <button
             onClick={() => router.push(`/project/${projectId}`)}
             className="mt-4 rounded-lg bg-red-600 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-white hover:bg-red-700 w-full sm:w-auto"
