@@ -71,15 +71,13 @@ export function PlaceholdersAndVanishInput({
     }, 300);
   };
 
-  const handleSendClick = () => {
+  const handleSendClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // If custom handler is provided, prevent default form submission and call custom handler
     if (onSendClick) {
+      e.preventDefault();
       onSendClick();
-    } else {
-      const form = document.getElementById('userIdeaForm') as HTMLFormElement;
-      if (form) {
-        form.requestSubmit();
-      }
     }
+    // Otherwise, let the default submit behavior handle it (type="submit" button)
   };
 
   return (
