@@ -94,9 +94,29 @@ def load_document_definitions() -> Dict[str, DocumentDefinition]:
     """Load and cache document definitions keyed by ID."""
     catalog_file = _catalog_path()
     if not catalog_file.exists():
+        # Provide helpful error message with all attempted paths
+        current_file = Path(__file__)
+        backend_dir = current_file.parent.parent.parent
+        project_root = backend_dir.parent
+        attempted_paths = [
+            str(catalog_file),
+            str(project_root / "backend" / "config" / "document_definitions.json"),
+            str(project_root / "config" / "document_definitions.json"),
+        ]
+        env_path = os.getenv(DOCUMENT_CONFIG_ENV, "not set")
         raise HTTPException(
             status_code=500,
-            detail=f"Document catalog not found at {catalog_file}",
+            detail=(
+                f"Document catalog not found.\n"
+                f"  Attempted paths:\n"
+                f"    - {attempted_paths[0]}\n"
+                f"    - {attempted_paths[1]}\n"
+                f"    - {attempted_paths[2]}\n"
+                f"  DOCUMENT_CONFIG_PATH env var: {env_path}\n"
+                f"  Current working directory: {Path.cwd()}\n"
+                f"  Project root (detected): {project_root}\n"
+                f"  Please ensure document_definitions.json exists in backend/config/"
+            ),
         )
 
     payload = json.loads(catalog_file.read_text(encoding="utf-8"))
