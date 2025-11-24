@@ -131,17 +131,41 @@ def validate_environment() -> None:
             logger.info(f"✓ {var} is set (length: {len(value)})")
     
     if missing:
+        from src.config.settings import get_settings
+        settings = get_settings()
+        is_prod = settings.environment.value == "prod"
+        
+        if is_prod:
+            # Production (Railway) troubleshooting
+            troubleshooting = (
+                "TROUBLESHOOTING (Production/Railway):\n"
+                + "1. Go to Railway → Your Service → Variables tab\n"
+                + "2. Make sure variables are set at SERVICE level (not just project level)\n"
+                + "3. Check that variable VALUES are not empty\n"
+                + "4. Remove any quotes around values (Railway may add them automatically)\n"
+                + "5. Click 'Update Variables' button to save\n"
+                + "6. Wait for service to redeploy\n"
+            )
+        else:
+            # Local development troubleshooting
+            troubleshooting = (
+                "TROUBLESHOOTING (Local Development):\n"
+                + "1. Check your .env file in the project root\n"
+                + "2. Add the missing variables:\n"
+                + "   DATABASE_URL=postgresql://localhost/omnidoc\n"
+                + "   REDIS_URL=redis://localhost:6379/0\n"
+                + "3. For cloud services (recommended):\n"
+                + "   - Database: Use Neon (https://neon.tech) - free managed PostgreSQL\n"
+                + "   - Redis: Use Upstash (https://upstash.com) - free managed Redis\n"
+                + "4. Run: ./backend/scripts/setup.sh (creates .env with defaults)\n"
+                + "5. Or manually create .env file with your connection strings\n"
+            )
+        
         error_msg = (
             "Missing required environment variables:\n"
             + "\n".join(f"  - {var}" for var in missing)
             + "\n\n"
-            + "TROUBLESHOOTING:\n"
-            + "1. Go to Railway → Your Service → Variables tab\n"
-            + "2. Make sure variables are set at SERVICE level (not just project level)\n"
-            + "3. Check that variable VALUES are not empty\n"
-            + "4. Remove any quotes around values (Railway may add them automatically)\n"
-            + "5. Click 'Update Variables' button to save\n"
-            + "6. Wait for service to redeploy\n"
+            + troubleshooting
         )
         logger.error(error_msg)
         raise ValueError(error_msg)
