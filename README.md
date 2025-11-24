@@ -56,7 +56,7 @@ git clone <repository-url>
 cd OmniDoc
 
 # Run the setup script (installs everything)
-./scripts/setup.sh
+./backend/scripts/setup.sh
 ```
 
 The setup script will:
@@ -101,7 +101,7 @@ python backend/uvicorn_dev.py
 
 **Terminal 2 - Celery Worker (for background tasks):**
 ```bash
-./scripts/start_celery_worker.sh
+./backend/scripts/start_celery_worker.sh
 ```
 
 **Terminal 3 - Frontend (for development):**
@@ -199,14 +199,19 @@ OmniDoc/
 │   ├── tasks/             # Celery background tasks
 │   ├── utils/             # Utilities (cache, parsers, etc.)
 │   └── web/               # FastAPI web application
+├── backend/               # Backend code
+│   ├── src/               # Source code
+│   ├── tests/             # Tests
+│   ├── scripts/           # Setup and utility scripts
+│   │   ├── setup.sh       # Main setup script
+│   │   └── start_celery_worker.sh  # Celery worker starter
+│   ├── config/            # Configuration files
+│   │   └── document_definitions.json  # Document catalog
+│   ├── pyproject.toml     # Python dependencies
+│   └── requirements.txt   # Python requirements
 ├── frontend/              # Next.js frontend
 ├── docs/                  # Generated documentation output
-├── scripts/               # Setup and utility scripts
-│   ├── setup.sh           # Main setup script
-│   └── start_celery_worker.sh  # Celery worker starter
-├── config/                # Configuration files
-│   └── document_definitions.json  # Document catalog
-├── .env                   # Environment configuration
+├── .env                   # Environment configuration (shared)
 ├── pyproject.toml         # Python dependencies
 └── README.md              # This file
 ```
@@ -284,7 +289,7 @@ pytest --cov=src --cov-report=html
 ### Setup Development Environment
 
 ```bash
-./scripts/setup.sh
+./backend/scripts/setup.sh
 ```
 
 ### Code Quality

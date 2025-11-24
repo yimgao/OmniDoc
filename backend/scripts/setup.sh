@@ -1,7 +1,7 @@
 #!/bin/bash
 # Complete setup script for OmniDoc
 # Sets up backend, frontend, and database
-# Usage: ./scripts/setup.sh
+# Usage: ./backend/scripts/setup.sh
 
 set -e
 
@@ -318,7 +318,7 @@ BACKEND_PORT=8000
 # -----------------------------------------------------------------------------
 # Document Configuration
 # -----------------------------------------------------------------------------
-DOCUMENT_CONFIG_PATH=config/document_definitions.json
+DOCUMENT_CONFIG_PATH="$BACKEND_DIR/config/document_definitions.json"
 DOCS_DIR=docs
 MAX_SUMMARY_LENGTH=3000
 
@@ -357,21 +357,28 @@ echo ""
 # =============================================================================
 echo -e "${BLUE}📄 Checking document definitions...${NC}"
 
-if [ ! -f "config/document_definitions.json" ]; then
+# Check for document definitions (in backend/config/)
+if [ ! -f "$BACKEND_DIR/config/document_definitions.json" ]; then
     echo -e "${YELLOW}  ⚠️  document_definitions.json not found${NC}"
-    if [ -f "JobTrackrAI_Document_Management_Template_v3.csv" ]; then
+    if [ -f "$PROJECT_ROOT/JobTrackrAI_Document_Management_Template_v3.csv" ] || [ -f "$PROJECT_ROOT/Document_Management_Template.csv" ]; then
         echo "  📦 Generating from CSV..."
+        CSV_FILE="$PROJECT_ROOT/JobTrackrAI_Document_Management_Template_v3.csv"
+        [ ! -f "$CSV_FILE" ] && CSV_FILE="$PROJECT_ROOT/Document_Management_Template.csv"
         if [ "$USE_UV" = true ]; then
-            uv run python scripts/csv_to_document_json.py \
-                --input JobTrackrAI_Document_Management_Template_v3.csv \
-                --output config/document_definitions.json
+            cd "$PROJECT_ROOT"
+            uv run python "$BACKEND_DIR/scripts/csv_to_document_json.py" \
+                --input "$CSV_FILE" \
+                --output "$BACKEND_DIR/config/document_definitions.json" 2>/dev/null || \
+            echo -e "${YELLOW}    ⚠️  csv_to_document_json.py not found. Skipping CSV generation.${NC}"
         else
+            cd "$PROJECT_ROOT"
             source .venv/bin/activate
-            python scripts/csv_to_document_json.py \
-                --input JobTrackrAI_Document_Management_Template_v3.csv \
-                --output config/document_definitions.json
+            python "$BACKEND_DIR/scripts/csv_to_document_json.py" \
+                --input "$CSV_FILE" \
+                --output "$BACKEND_DIR/config/document_definitions.json" 2>/dev/null || \
+            echo -e "${YELLOW}    ⚠️  csv_to_document_json.py not found. Skipping CSV generation.${NC}"
         fi
-        echo -e "${GREEN}    ✅ Document definitions generated${NC}"
+        echo -e "${GREEN}    ✅ Document definitions check complete${NC}"
     else
         echo -e "${YELLOW}    ⚠️  CSV file not found. Please generate document_definitions.json manually${NC}"
     fi

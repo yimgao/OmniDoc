@@ -19,13 +19,24 @@ pytest
 
 ### Run with Coverage
 ```bash
-pytest --cov=src --cov=frontend --cov-report=html
+# From backend directory
+cd backend
+pytest --cov=src --cov-report=html
+
+# Or from project root
+pytest --cov=backend/src --cov-report=html
 ```
 
 ### Run Specific Test File
 ```bash
+# From backend directory
+cd backend
 pytest tests/test_api.py
 pytest tests/test_utils.py
+
+# Or from project root
+pytest backend/tests/test_api.py
+pytest backend/tests/test_utils.py
 ```
 
 ### Run with Verbose Output

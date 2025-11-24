@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start Celery worker for background task processing
-# Usage: ./scripts/start_celery_worker.sh
+# Usage: ./backend/scripts/start_celery_worker.sh
 
 set -e
 
@@ -12,7 +12,7 @@ cd "$BACKEND_DIR"
 
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then
-    echo "❌ Virtual environment not found. Please run ./scripts/setup.sh first"
+    echo "❌ Virtual environment not found. Please run ./backend/scripts/setup.sh first"
     exit 1
 fi
 
