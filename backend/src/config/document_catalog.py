@@ -103,9 +103,17 @@ def _catalog_path() -> Path:
     return project_root / DEFAULT_CATALOG_PATH
 
 
-@lru_cache(maxsize=1)
+# Cache at module level to avoid reloading on every call
+_document_definitions_cache: Optional[Dict[str, DocumentDefinition]] = None
+
 def load_document_definitions() -> Dict[str, DocumentDefinition]:
     """Load and cache document definitions keyed by ID."""
+    global _document_definitions_cache
+    
+    # Return cached version if available
+    if _document_definitions_cache is not None:
+        return _document_definitions_cache
+    
     catalog_file = _catalog_path()
     
     # Double-check: if file doesn't exist, try to find it in common locations
@@ -190,6 +198,8 @@ def load_document_definitions() -> Dict[str, DocumentDefinition]:
             special_key=raw.get("special_key"),
         )
 
+    # Cache the result
+    _document_definitions_cache = definitions
     return definitions
 
 
