@@ -52,25 +52,39 @@ def _catalog_path() -> Path:
     2. Default path: backend/config/document_definitions.json (relative to project root)
     3. Fallback: config/document_definitions.json (for backward compatibility)
     """
+    # Get project root (consistent for all path resolution)
+    current_file = Path(__file__)
+    # From backend/src/config/document_catalog.py -> backend/
+    backend_dir = current_file.parent.parent.parent
+    # From backend/ -> project root
+    project_root = backend_dir.parent
+    
     env_path = os.getenv(DOCUMENT_CONFIG_ENV)
     if env_path:
         path = Path(env_path)
         # If absolute path, use as-is
         if path.is_absolute():
             return path
-        # If relative path, try to resolve from project root
-        # Check if we're in backend/src/config/ and go up to project root
-        current_file = Path(__file__)
-        # From backend/src/config/document_catalog.py -> backend/
-        backend_dir = current_file.parent.parent.parent
-        # From backend/ -> project root
-        project_root = backend_dir.parent
-        # Try resolving from project root
-        resolved = project_root / path
-        if resolved.exists():
-            return resolved
-        # If not found, try as-is (might be relative to current working directory)
-        return path
+        
+        # For relative paths, try multiple locations
+        # 1. Resolve from project root (most common case)
+        resolved_from_root = project_root / path
+        if resolved_from_root.exists():
+            return resolved_from_root
+        
+        # 2. Handle old-style paths like "config/document_definitions.json"
+        # Try new location: backend/config/document_definitions.json
+        if len(path.parts) > 0 and path.parts[0] == "config":
+            new_location = project_root / "backend" / path
+            if new_location.exists():
+                return new_location
+        
+        # 3. Try as-is from current working directory (for backward compatibility)
+        if path.exists():
+            return path
+        
+        # 4. Return the resolved path from project root (will fail with clear error)
+        return resolved_from_root
     
     # Default: try backend/config/document_definitions.json from project root
     current_file = Path(__file__)
