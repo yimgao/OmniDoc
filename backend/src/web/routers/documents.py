@@ -78,7 +78,24 @@ async def get_document_templates(request: Request) -> DocumentCatalogResponse:
     generated_at: Optional[str] = None
     source: Optional[str] = None
 
-    catalog_file = Path(os.getenv("DOCUMENT_CONFIG_PATH", "config/document_definitions.json"))
+    # Get document config path, with smart fallback for new backend/ structure
+    env_path = os.getenv("DOCUMENT_CONFIG_PATH")
+    if env_path:
+        catalog_file = Path(env_path)
+        # If relative, try to resolve from project root
+        if not catalog_file.is_absolute():
+            # Try to find project root (go up from backend/src/web/routers/)
+            current_file = Path(__file__)
+            project_root = current_file.parent.parent.parent.parent  # backend/src/web/routers -> project root
+            catalog_file = project_root / catalog_file
+    else:
+        # Default: try backend/config/document_definitions.json
+        current_file = Path(__file__)
+        project_root = current_file.parent.parent.parent.parent
+        catalog_file = project_root / "backend" / "config" / "document_definitions.json"
+        # Fallback to old location
+        if not catalog_file.exists():
+            catalog_file = project_root / "config" / "document_definitions.json"
     if catalog_file.exists():
         try:
             payload = json.loads(catalog_file.read_text(encoding="utf-8"))

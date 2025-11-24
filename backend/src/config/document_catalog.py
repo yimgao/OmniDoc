@@ -15,7 +15,9 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 DOCUMENT_CONFIG_ENV = "DOCUMENT_CONFIG_PATH"
-DEFAULT_CATALOG_PATH = Path("config/document_definitions.json")
+# Default path: backend/config/document_definitions.json (relative to project root)
+# This will be resolved relative to where the script is run from
+DEFAULT_CATALOG_PATH = Path("backend/config/document_definitions.json")
 QUALITY_RULES_PATH = Path("src/config/quality_rules.json")
 
 
@@ -43,10 +45,49 @@ class DocumentDefinition:
 
 
 def _catalog_path() -> Path:
+    """
+    Get the path to the document definitions catalog.
+    
+    Checks in order:
+    1. DOCUMENT_CONFIG_PATH environment variable (absolute or relative)
+    2. Default path: backend/config/document_definitions.json (relative to project root)
+    3. Fallback: config/document_definitions.json (for backward compatibility)
+    """
     env_path = os.getenv(DOCUMENT_CONFIG_ENV)
     if env_path:
-        return Path(env_path)
-    return DEFAULT_CATALOG_PATH
+        path = Path(env_path)
+        # If absolute path, use as-is
+        if path.is_absolute():
+            return path
+        # If relative path, try to resolve from project root
+        # Check if we're in backend/src/config/ and go up to project root
+        current_file = Path(__file__)
+        # From backend/src/config/document_catalog.py -> backend/
+        backend_dir = current_file.parent.parent.parent
+        # From backend/ -> project root
+        project_root = backend_dir.parent
+        # Try resolving from project root
+        resolved = project_root / path
+        if resolved.exists():
+            return resolved
+        # If not found, try as-is (might be relative to current working directory)
+        return path
+    
+    # Default: try backend/config/document_definitions.json from project root
+    current_file = Path(__file__)
+    backend_dir = current_file.parent.parent.parent
+    project_root = backend_dir.parent
+    default_path = project_root / DEFAULT_CATALOG_PATH
+    if default_path.exists():
+        return default_path
+    
+    # Fallback: try old location for backward compatibility
+    fallback = project_root / "config" / "document_definitions.json"
+    if fallback.exists():
+        return fallback
+    
+    # Last resort: return default (will fail with clear error message)
+    return project_root / DEFAULT_CATALOG_PATH
 
 
 @lru_cache(maxsize=1)

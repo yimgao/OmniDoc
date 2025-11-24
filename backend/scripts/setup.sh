@@ -282,7 +282,8 @@ echo -e "${BLUE}⚙️  Setting up environment configuration...${NC}"
 
 if [ ! -f ".env" ]; then
     echo "  📝 Creating .env file from template..."
-    cat > .env << 'ENVEOF'
+    # Use unquoted heredoc to allow variable expansion
+    cat > .env << ENVEOF
 # =============================================================================
 # OmniDoc Environment Configuration
 # =============================================================================
@@ -318,7 +319,7 @@ BACKEND_PORT=8000
 # -----------------------------------------------------------------------------
 # Document Configuration
 # -----------------------------------------------------------------------------
-DOCUMENT_CONFIG_PATH="$BACKEND_DIR/config/document_definitions.json"
+DOCUMENT_CONFIG_PATH=${BACKEND_DIR}/config/document_definitions.json
 DOCS_DIR=docs
 MAX_SUMMARY_LENGTH=3000
 
