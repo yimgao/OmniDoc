@@ -179,6 +179,9 @@ class DocumentImproverAgent(BaseAgent):
             
             structured_context += "**CRITICAL:** Address ALL items in the structured feedback above. Focus on the priority improvements first.\n"
         
+        # Calculate original document length for reference
+        original_length = len(original_document)
+        
         prompt = f"""You are a Documentation Improvement Specialist. Your task is to improve a document by ADDING information based on quality review feedback, while preserving the existing content and structure.
 
 CRITICAL INSTRUCTIONS:
@@ -197,6 +200,21 @@ CRITICAL INSTRUCTIONS:
 7. If sections are missing, ADD them with detailed, high-quality content
 8. If word count is low, EXPAND existing sections by adding more detail, examples, and explanations
 9. If readability needs improvement, ADD clarifications and examples without changing existing text
+
+🚨 CRITICAL LENGTH REQUIREMENT:
+- The improved document MUST be LONGER than the original (unless original was extremely long, >100k chars)
+- Original document length: {original_length:,} characters
+- If the improved document is shorter, it means you deleted content, which is NOT allowed
+- You MUST ADD content, not remove it
+- The improved document should be at least 10-20% longer than the original to show improvement
+
+🚨 CONTENT PRESERVATION REQUIREMENT:
+- You MUST preserve ALL original sections and paragraphs
+- You MUST NOT delete any existing content
+- You MUST NOT shorten existing sections
+- You MUST NOT remove examples, explanations, or details from the original
+- You can only ADD to the document, never subtract
+
 {focus_text}
 {score_context}
 {structured_context}
@@ -212,13 +230,14 @@ CRITICAL INSTRUCTIONS:
 === YOUR TASK ===
 
 Generate an IMPROVED version of the document by ADDING information that:
-1. PRESERVES all existing content and structure
+1. PRESERVES all existing content and structure (100% of original content must remain)
 2. ADDS missing sections with substantial, high-quality content
 3. EXPANDS existing sections with more detail, examples, and explanations
 4. ADDS clarifications and improvements without removing original text
 5. ADDRESSES all issues mentioned in the quality feedback by adding content
 6. MAINTAINS professional quality and consistency
 7. MEETS all quality metric requirements (word count, sections, readability)
+8. IS LONGER than the original document (add at least 10-20% more content)
 
 IMPORTANT: This is an ADDITIVE improvement. Keep ALL original content and structure. Only ADD:
 - Missing sections (add them in appropriate locations)
@@ -229,6 +248,8 @@ DO NOT:
 - Remove or rewrite existing content
 - Change the document structure significantly
 - Delete any existing sections or paragraphs
+- Make the document shorter than the original
+- Remove examples, explanations, or details from the original
 
 Start directly with the improved document content (preserving original structure):"""
         

@@ -11,6 +11,7 @@ from src.context.context_manager import ContextManager
 from src.utils.file_manager import FileManager
 from src.utils.logger import get_logger
 from src.utils.prompt_registry import get_prompt_for_document
+from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
 
 logger = get_logger(__name__)
 
@@ -68,6 +69,23 @@ class GenericDocumentAgent(BaseAgent):
         
         return context
     
+    def _get_quality_requirements(self) -> Optional[Dict]:
+        """
+        Get quality requirements for this document type from quality_rules.json
+        
+        Returns:
+            Dict with required_sections, auto_fail, min_words, etc., or None if not found
+        """
+        try:
+            checker = DocumentTypeQualityChecker()
+            requirements = checker.get_requirements_for_type(self.definition.id)
+            # Only return if we got valid requirements (not default)
+            if requirements.get("source") != "default":
+                return requirements
+        except Exception as e:
+            logger.debug(f"Could not load quality requirements for {self.definition.id}: {e}")
+        return None
+    
     def _build_prompt(
         self,
         user_idea: str,
@@ -120,6 +138,34 @@ class GenericDocumentAgent(BaseAgent):
                     deps_section += f"- **{dep_data.get('name', dep_id)}** ({dep_id})\n"
                 deps_section += "\nThese documents have been provided in the context above. Use them to ensure consistency and build upon existing information.\n"
                 specialized_prompt += deps_section
+            
+            # Add quality requirements to specialized prompt as well
+            quality_requirements = self._get_quality_requirements()
+            if quality_requirements:
+                required_sections = quality_requirements.get("required_sections", [])
+                auto_fail = quality_requirements.get("auto_fail", [])
+                
+                if required_sections or auto_fail:
+                    quality_section = "\n\n🚨 CRITICAL: DOCUMENT QUALITY REQUIREMENTS - AUTO-FAIL IF MISSING:\n\n"
+                    
+                    if required_sections:
+                        quality_section += "REQUIRED SECTIONS (MUST include all of these or document will be automatically rejected):\n"
+                        for i, section in enumerate(required_sections, 1):
+                            section_clean = section.replace("^#+\\s+", "").replace("\\s+", " ")
+                            quality_section += f"  {i}. ## {section_clean} (REQUIRED - auto-fail if missing)\n"
+                        quality_section += "\n"
+                    
+                    if auto_fail:
+                        quality_section += "AUTO-FAIL CONDITIONS (document will be automatically rejected if any of these are true):\n"
+                        for i, condition in enumerate(auto_fail, 1):
+                            quality_section += f"  {i}. {condition}\n"
+                        quality_section += "\n"
+                    
+                    quality_section += "⚠️ IMPORTANT: If the document is missing any required section or meets any auto-fail condition,\n"
+                    quality_section += "   it will be automatically rejected and must be regenerated. Ensure ALL required sections\n"
+                    quality_section += "   are present with substantial, high-quality content.\n"
+                    
+                    specialized_prompt += quality_section
             
             return specialized_prompt
 
@@ -186,6 +232,44 @@ class GenericDocumentAgent(BaseAgent):
                 )
             guidance.append("CRITICAL: Use the information from these dependency documents to ensure consistency and accuracy. Reference specific details, align with existing plans, and build upon the foundation established in these documents.")
 
+        # Get quality rules for this document type
+        quality_requirements = self._get_quality_requirements()
+        
+        # Build quality requirements section
+        quality_requirements_text = []
+        if quality_requirements:
+            required_sections = quality_requirements.get("required_sections", [])
+            auto_fail = quality_requirements.get("auto_fail", [])
+            min_word_count = quality_requirements.get("min_words", 500)
+            
+            if required_sections or auto_fail:
+                quality_requirements_text.extend([
+                    "",
+                    "🚨 CRITICAL: DOCUMENT QUALITY REQUIREMENTS - AUTO-FAIL IF MISSING:",
+                    "",
+                ])
+                
+                if required_sections:
+                    quality_requirements_text.append("REQUIRED SECTIONS (MUST include all of these or document will be automatically rejected):")
+                    for i, section in enumerate(required_sections, 1):
+                        # Clean section name (remove regex patterns)
+                        section_clean = section.replace("^#+\\s+", "").replace("\\s+", " ")
+                        quality_requirements_text.append(f"  {i}. ## {section_clean} (REQUIRED - auto-fail if missing)")
+                    quality_requirements_text.append("")
+                
+                if auto_fail:
+                    quality_requirements_text.append("AUTO-FAIL CONDITIONS (document will be automatically rejected if any of these are true):")
+                    for i, condition in enumerate(auto_fail, 1):
+                        quality_requirements_text.append(f"  {i}. {condition}")
+                    quality_requirements_text.append("")
+                
+                quality_requirements_text.extend([
+                    "⚠️ IMPORTANT: If the document is missing any required section or meets any auto-fail condition,",
+                    "   it will be automatically rejected and must be regenerated. Ensure ALL required sections",
+                    "   are present with substantial, high-quality content.",
+                    "",
+                ])
+        
         guidance.extend(
             [
                 "### Requirements",
@@ -203,7 +287,15 @@ class GenericDocumentAgent(BaseAgent):
                 "- You MUST ensure the document is comprehensive and complete - do not stop mid-section",
                 "- If a section requires examples, provide real, specific examples based on the project",
                 "- If a section requires data or metrics, provide realistic estimates based on the project scope",
-                "",
+            ]
+        )
+        
+        # Add quality requirements if available
+        if quality_requirements_text:
+            guidance.extend(quality_requirements_text)
+        
+        guidance.extend(
+            [
                 READABILITY_GUIDELINES.strip(),
                 "",
                 "Begin the document now. Generate the COMPLETE document with ALL sections fully populated:",

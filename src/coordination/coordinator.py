@@ -123,12 +123,23 @@ class WorkflowCoordinator:
                     }
                 )
             
+            # Extract sections for logging
+            original_sections = self._extract_sections(original_content)
             logger.info(
-                "🔍 Reviewing quality of document %s [Project: %s] [Content length: %d chars]",
+                "🔍 Reviewing quality of document %s [Project: %s] [Content length: %d chars] [Sections: %d]",
                 document_id,
                 project_id,
-                len(original_content)
+                len(original_content),
+                len(original_sections)
             )
+            
+            if original_sections:
+                logger.debug(
+                    "📋 Original document sections for %s [Project: %s]: %s",
+                    document_id,
+                    project_id,
+                    ", ".join(original_sections[:10])  # Show first 10 sections
+                )
             
             # Get automated quality scores first (to include llm_focus and auto_fail)
             from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
@@ -137,6 +148,19 @@ class WorkflowCoordinator:
                 content=original_content,
                 document_type=document_name  # Use document name for better matching
             )
+            
+            # Check for auto_fail conditions
+            auto_fail_info = automated_scores.get("auto_fail", {})
+            auto_fail_triggered = not auto_fail_info.get("auto_fail_passed", True) if auto_fail_info else False
+            auto_fail_reasons = auto_fail_info.get("auto_fail_violations", []) if auto_fail_info else []
+            
+            if auto_fail_triggered:
+                logger.warning(
+                    "🚨 AUTO-FAIL triggered for %s [Project: %s]: %s",
+                    document_id,
+                    project_id,
+                    ", ".join(auto_fail_reasons) if auto_fail_reasons else "Auto-fail conditions met"
+                )
             
             # Get structured feedback from quality reviewer (sync method, run in executor)
             loop = asyncio.get_event_loop()
@@ -150,14 +174,31 @@ class WorkflowCoordinator:
             )
             
             quality_score = structured_feedback_dict.get("score", 5.0)
+            
+            # Step 2: Force improvement if auto_fail is triggered (even if score is high)
+            if auto_fail_triggered:
+                # Force quality score below threshold to ensure improvement
+                if quality_score >= 7.0:
+                    logger.info(
+                        "🔧 Forcing improvement for %s due to auto-fail conditions [Original score: %.1f/10] [Project: %s]",
+                        document_id,
+                        quality_score,
+                        project_id
+                    )
+                    quality_score = 6.5  # Force below threshold
+                    structured_feedback_dict["score"] = quality_score
+                    structured_feedback_dict["forced_improvement"] = True
+                    structured_feedback_dict["auto_fail_reasons"] = auto_fail_reasons
+            
             logger.info(
-                "📊 Quality score for %s: %.1f/10 [Project: %s]",
+                "📊 Quality score for %s: %.1f/10 [Project: %s] [Auto-fail: %s]",
                 document_id,
                 quality_score,
-                project_id
+                project_id,
+                "YES" if auto_fail_triggered else "NO"
             )
             
-            # Step 2: Check if improvement is needed (threshold: 7.0/10)
+            # Step 3: Check if improvement is needed (threshold: 7.0/10)
             if quality_score >= 7.0:
                 logger.info(
                     "✅ Document %s quality is acceptable [Project: %s] [Score: %.1f/10] [Skipping improvement]",
@@ -266,18 +307,65 @@ Issues Identified:
             merged_content = self._merge_improved_content(
                 original_content=original_content,
                 improved_content=improved_content,
-                structured_feedback=structured_feedback_dict,
+                structured_feedback={**structured_feedback_dict, "document_type": document_type},
             )
             
+            # Step 7: Validate improved content
+            validation_result = self._validate_improved_content(
+                original_content=original_content,
+                improved_content=merged_content,
+                document_type=document_type,
+                document_id=document_id,
+                project_id=project_id,
+            )
+            
+            # If validation fails critically, log warning but still use improved content
+            if not validation_result.get("passed", True):
+                logger.warning(
+                    "⚠️ Improved content validation failed for %s [Project: %s]: %s",
+                    document_id,
+                    project_id,
+                    validation_result.get("warnings", [])
+                )
+            
             improvement_ratio = (len(merged_content) / len(original_content)) * 100 if original_content else 0
+            
+            # Extract sections for comparison
+            improved_sections = self._extract_sections(merged_content)
+            section_change = len(improved_sections) - len(original_sections)
+            
             logger.info(
-                "✅ Document %s improved [Project: %s] [Original: %d chars] [Improved: %d chars] [Change: %.1f%%]",
+                "✅ Document %s improved [Project: %s] [Original: %d chars, %d sections] [Improved: %d chars, %d sections] [Change: %.1f%% chars, %+d sections]",
                 document_id,
                 project_id,
                 len(original_content),
+                len(original_sections),
                 len(merged_content),
-                improvement_ratio - 100
+                len(improved_sections),
+                improvement_ratio - 100,
+                section_change
             )
+            
+            # Log section comparison if there are changes
+            if section_change != 0:
+                added_sections = set(improved_sections) - set(original_sections)
+                removed_sections = set(original_sections) - set(improved_sections)
+                
+                if added_sections:
+                    logger.info(
+                        "➕ Added sections to %s [Project: %s]: %s",
+                        document_id,
+                        project_id,
+                        ", ".join(list(added_sections)[:5])
+                    )
+                
+                if removed_sections:
+                    logger.warning(
+                        "➖ Removed sections from %s [Project: %s]: %s",
+                        document_id,
+                        project_id,
+                        ", ".join(list(removed_sections)[:5])
+                    )
             
             if progress_callback:
                 await progress_callback(
@@ -309,21 +397,94 @@ Issues Identified:
         
         Strategy:
         1. If improved content is significantly longer and contains original structure, use improved
-        2. Otherwise, identify sections that need improvement and merge them
-        3. Preserve original sections that don't need changes
+        2. If improved content is shorter, check if it's still complete (has all required sections)
+        3. If improved content is significantly shorter and missing sections, log warning but use improved
+        4. Add detailed logging for content comparison
         """
-        # If improved content is much longer and seems complete, use it
-        if len(improved_content) > len(original_content) * 1.2:
-            # Check if improved content contains key sections from original
-            original_sections = self._extract_sections(original_content)
-            improved_sections = self._extract_sections(improved_content)
-            
-            # If improved has all or most original sections, use it
-            if len(improved_sections) >= len(original_sections) * 0.8:
-                return improved_content
+        original_length = len(original_content)
+        improved_length = len(improved_content)
+        length_ratio = improved_length / original_length if original_length > 0 else 1.0
         
-        # Otherwise, try to merge specific sections
-        # For now, return improved content as document improver should preserve structure
+        # Extract sections for comparison
+        original_sections = self._extract_sections(original_content)
+        improved_sections = self._extract_sections(improved_content)
+        
+        # Log detailed comparison
+        logger.info(
+            "📊 Content merge analysis [Original: %d chars, %d sections] [Improved: %d chars, %d sections] [Ratio: %.1f%%]",
+            original_length,
+            len(original_sections),
+            improved_length,
+            len(improved_sections),
+            length_ratio * 100
+        )
+        
+        # Check if improved content is significantly shorter (more than 20% reduction)
+        if length_ratio < 0.8:
+            logger.warning(
+                "⚠️ Improved content is %.1f%% shorter than original [Original: %d chars] [Improved: %d chars]",
+                (1 - length_ratio) * 100,
+                original_length,
+                improved_length
+            )
+            
+            # Check if improved content has fewer sections
+            if len(improved_sections) < len(original_sections) * 0.8:
+                missing_sections = set(original_sections) - set(improved_sections)
+                logger.warning(
+                    "⚠️ Improved content is missing %d sections: %s",
+                    len(missing_sections),
+                    ", ".join(list(missing_sections)[:5])  # Show first 5
+                )
+            
+            # Check if improved content has all required sections from quality rules
+            try:
+                from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
+                checker = DocumentTypeQualityChecker()
+                # Try to get document type from structured_feedback or use a default
+                document_type = structured_feedback.get("document_type", "document")
+                requirements = checker.get_requirements_for_type(document_type)
+                required_sections = requirements.get("required_sections", [])
+                
+                if required_sections:
+                    # Check if improved content has all required sections
+                    improved_section_names = [s.lower() for s in improved_sections]
+                    missing_required = []
+                    for req_section_pattern in required_sections:
+                        # Convert regex pattern to simple name for comparison
+                        req_section_clean = req_section_pattern.replace("^#+\\s+", "").replace("\\s+", " ").lower()
+                        found = any(req_section_clean in section.lower() or section.lower() in req_section_clean 
+                                   for section in improved_sections)
+                        if not found:
+                            missing_required.append(req_section_pattern.replace("^#+\\s+", "").replace("\\s+", " "))
+                    
+                    if missing_required:
+                        logger.error(
+                            "❌ Improved content is missing REQUIRED sections: %s. This is a critical issue.",
+                            ", ".join(missing_required)
+                        )
+                        # Still use improved content, but log the error
+                    else:
+                        logger.info("✅ Improved content contains all required sections despite being shorter")
+            except Exception as e:
+                logger.debug(f"Could not verify required sections: {e}")
+        
+        # If improved content is significantly longer and has most sections, use it
+        if length_ratio > 1.2 and len(improved_sections) >= len(original_sections) * 0.8:
+            logger.info("✅ Using improved content (significantly longer and complete)")
+            return improved_content
+        
+        # If improved content is shorter but still has most sections, use it (document improver should preserve structure)
+        if len(improved_sections) >= len(original_sections) * 0.8:
+            logger.info("✅ Using improved content (has most original sections)")
+            return improved_content
+        
+        # If improved content is significantly shorter and missing many sections, log warning but still use it
+        # (The document improver should have preserved structure, so this might indicate a real issue)
+        logger.warning(
+            "⚠️ Improved content is shorter and missing sections, but using it anyway. "
+            "Document improver should have preserved structure."
+        )
         return improved_content
     
     def _extract_sections(self, content: str) -> List[str]:
@@ -336,6 +497,93 @@ Issues Identified:
             if match:
                 sections.append(match.group(1).strip())
         return sections
+    
+    def _validate_improved_content(
+        self,
+        original_content: str,
+        improved_content: str,
+        document_type: str,
+        document_id: str,
+        project_id: str,
+    ) -> Dict:
+        """
+        Validate improved content to ensure it hasn't lost critical information.
+        
+        Returns:
+            Dict with 'passed' (bool) and 'warnings' (list of strings)
+        """
+        validation_result = {
+            "passed": True,
+            "warnings": [],
+        }
+        
+        original_length = len(original_content)
+        improved_length = len(improved_content)
+        length_ratio = improved_length / original_length if original_length > 0 else 1.0
+        
+        # Check 1: Content length validation
+        if length_ratio < 0.9:  # More than 10% reduction
+            validation_result["warnings"].append(
+                f"Improved content is {((1 - length_ratio) * 100):.1f}% shorter than original "
+                f"({original_length:,} → {improved_length:,} chars)"
+            )
+            if length_ratio < 0.8:  # More than 20% reduction
+                validation_result["passed"] = False
+        
+        # Check 2: Section preservation validation
+        original_sections = self._extract_sections(original_content)
+        improved_sections = self._extract_sections(improved_content)
+        
+        if len(improved_sections) < len(original_sections) * 0.8:
+            missing_sections = set(original_sections) - set(improved_sections)
+            validation_result["warnings"].append(
+                f"Improved content is missing {len(missing_sections)} sections: "
+                f"{', '.join(list(missing_sections)[:5])}"
+            )
+            if len(improved_sections) < len(original_sections) * 0.7:
+                validation_result["passed"] = False
+        
+        # Check 3: Required sections validation (from quality rules)
+        try:
+            from src.quality.document_type_quality_checker import DocumentTypeQualityChecker
+            checker = DocumentTypeQualityChecker()
+            requirements = checker.get_requirements_for_type(document_type)
+            required_sections = requirements.get("required_sections", [])
+            
+            if required_sections:
+                improved_section_names = [s.lower() for s in improved_sections]
+                missing_required = []
+                for req_section_pattern in required_sections:
+                    req_section_clean = req_section_pattern.replace("^#+\\s+", "").replace("\\s+", " ").lower()
+                    found = any(req_section_clean in section.lower() or section.lower() in req_section_clean 
+                               for section in improved_sections)
+                    if not found:
+                        missing_required.append(req_section_pattern.replace("^#+\\s+", "").replace("\\s+", " "))
+                
+                if missing_required:
+                    validation_result["warnings"].append(
+                        f"Improved content is missing REQUIRED sections: {', '.join(missing_required)}"
+                    )
+                    validation_result["passed"] = False
+        except Exception as e:
+            logger.debug(f"Could not validate required sections: {e}")
+        
+        # Log validation result
+        if validation_result["passed"]:
+            logger.info(
+                "✅ Improved content validation passed for %s [Project: %s]",
+                document_id,
+                project_id
+            )
+        else:
+            logger.warning(
+                "⚠️ Improved content validation failed for %s [Project: %s]: %s",
+                document_id,
+                project_id,
+                "; ".join(validation_result["warnings"])
+            )
+        
+        return validation_result
 
     async def _generate_single_doc(
         self,
