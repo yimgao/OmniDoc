@@ -184,11 +184,12 @@ class BaseAgent(ABC):
                 logger.debug(f"{self.agent_name} using phase {phase_number} model: {model}")
         
         # Set default max_tokens for document generation if not provided
-        # Gemini 2.0 Flash supports up to 8192 output tokens, use 8192 for long documents
+        # Gemini 2.0 Flash supports up to 8192 output tokens (maximum allowed)
         # For other providers, use 8192 tokens (equivalent to ~32KB of text)
+        # IMPORTANT: 8192 is the maximum output token limit for Gemini 2.0 Flash - do not exceed
         if max_tokens is None:
             if self.provider_name == "gemini":
-                # Gemini 2.0 Flash supports 8192 output tokens
+                # Gemini 2.0 Flash maximum output tokens: 8192 (do not exceed)
                 max_tokens = 8192
             else:
                 # Default for other providers
@@ -289,11 +290,12 @@ class BaseAgent(ABC):
                     logger.debug(f"{self.agent_name} using phase {phase_to_use} model: {model}")
         
         # Set default max_tokens for document generation if not provided
-        # Gemini 2.0 Flash supports up to 8192 output tokens, use 8192 for long documents
+        # Gemini 2.0 Flash supports up to 8192 output tokens (maximum allowed)
         # For other providers, use 8192 tokens (equivalent to ~32KB of text)
+        # IMPORTANT: 8192 is the maximum output token limit for Gemini 2.0 Flash - do not exceed
         if max_tokens is None:
             if self.provider_name == "gemini":
-                # Gemini 2.0 Flash supports 8192 output tokens
+                # Gemini 2.0 Flash maximum output tokens: 8192 (do not exceed)
                 max_tokens = 8192
             else:
                 # Default for other providers
