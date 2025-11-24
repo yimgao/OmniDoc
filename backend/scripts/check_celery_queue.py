@@ -6,8 +6,9 @@ Run this in Railway Shell to diagnose why tasks aren't being processed
 import os
 import sys
 
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add backend directory to path (for src imports)
+backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, backend_dir)
 
 from src.tasks.celery_app import celery_app
 import redis

@@ -12,11 +12,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Get the script directory and project root
+# Get the script directory, backend root, and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$BACKEND_DIR/.." && pwd)"
 
-# Change to project root
+# Change to project root for shared operations, backend dir for backend operations
 cd "$PROJECT_ROOT"
 
 echo -e "${BLUE}🚀 Setting up OmniDoc...${NC}"
@@ -108,27 +109,36 @@ echo ""
 # =============================================================================
 echo -e "${BLUE}🐍 Setting up backend (Python)...${NC}"
 
+# Change to backend directory for Python setup
+cd "$BACKEND_DIR"
+
 # Create virtual environment
 if [ "$USE_UV" = true ]; then
-    if [ ! -d ".venv" ]; then
+    if [ ! -d "$PROJECT_ROOT/.venv" ]; then
         echo "  📦 Creating virtual environment with uv..."
+        cd "$PROJECT_ROOT"
         uv venv
+        cd "$BACKEND_DIR"
     else
         echo "  📦 Virtual environment already exists"
     fi
     
     echo "  📦 Installing Python dependencies..."
-    uv sync --all-extras
+    cd "$PROJECT_ROOT"
+    uv sync --all-extras --directory backend
+    cd "$BACKEND_DIR"
 else
-    if [ ! -d ".venv" ]; then
+    if [ ! -d "$PROJECT_ROOT/.venv" ]; then
         echo "  📦 Creating virtual environment..."
+        cd "$PROJECT_ROOT"
         python3 -m venv .venv
+        cd "$BACKEND_DIR"
     else
         echo "  📦 Virtual environment already exists"
     fi
     
     echo "  📦 Activating virtual environment..."
-    source .venv/bin/activate
+    source "$PROJECT_ROOT/.venv/bin/activate"
     
     echo "  📦 Upgrading pip..."
     pip install --upgrade pip
@@ -136,6 +146,9 @@ else
     echo "  📦 Installing Python dependencies..."
     pip install -e ".[dev,openai,anthropic,full]"
 fi
+
+# Return to project root
+cd "$PROJECT_ROOT"
 
 # Verify backend installation
 echo "  ✅ Verifying backend installation..."

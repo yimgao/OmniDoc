@@ -27,7 +27,7 @@ def main() -> None:
         host=host,
         port=port,
         reload=True,
-        reload_dirs=["src"],
+        reload_dirs=["backend/src"],
         log_level="info",
     )
     server = uvicorn.Server(config)

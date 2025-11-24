@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency files
-COPY pyproject.toml requirements.txt ./
+COPY backend/pyproject.toml backend/requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
@@ -37,8 +37,10 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
-COPY . .
+# Copy application code (backend)
+COPY backend/ ./backend/
+# Copy shared files (if any)
+COPY docker-compose.yml .dockerignore ./
 
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
@@ -54,8 +56,11 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
+# Set PYTHONPATH to include backend directory
+ENV PYTHONPATH=/app/backend:$PYTHONPATH
+
 # Default command: API server
 # For Celery worker, override in Railway Settings → Deploy → Custom Start Command:
-# celery -A src.tasks.celery_app worker --loglevel=info --concurrency=1
-CMD ["gunicorn", "src.web.app:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "--worker-class", "uvicorn.workers.UvicornWorker"]
+# PYTHONPATH=/app/backend:$PYTHONPATH celery -A src.tasks.celery_app worker --loglevel=info --concurrency=1
+CMD ["gunicorn", "src.web.app:app", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "--worker-class", "uvicorn.workers.UvicornWorker", "--chdir", "/app/backend"]
 

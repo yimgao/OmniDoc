@@ -5,9 +5,10 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$BACKEND_DIR/.." && pwd)"
 
-cd "$PROJECT_ROOT"
+cd "$BACKEND_DIR"
 
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then
@@ -22,7 +23,8 @@ mkdir -p logs
 if command -v uv &> /dev/null; then
     echo "🚀 Starting Celery worker with uv..."
     echo "📝 Logs will be written to logs/celery_worker.log"
-    uv run celery -A src.tasks.celery_app worker \
+    cd "$PROJECT_ROOT"
+    PYTHONPATH="$BACKEND_DIR:$PYTHONPATH" uv run celery -A src.tasks.celery_app worker \
         --loglevel=info \
         --concurrency=2 \
         --max-tasks-per-child=10 \
@@ -31,8 +33,9 @@ if command -v uv &> /dev/null; then
 else
     echo "🚀 Starting Celery worker..."
     echo "📝 Logs will be written to logs/celery_worker.log"
+    cd "$PROJECT_ROOT"
     source .venv/bin/activate
-    celery -A src.tasks.celery_app worker \
+    PYTHONPATH="$BACKEND_DIR:$PYTHONPATH" celery -A src.tasks.celery_app worker \
         --loglevel=info \
         --concurrency=2 \
         --max-tasks-per-child=10 \
